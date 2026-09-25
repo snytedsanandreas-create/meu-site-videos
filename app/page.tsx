@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { CldUploadWidget } from "next-cloudinary";
+import { supabase } from "@/lib/supabase";
 
 // ============ DADOS FAKE ============
 const videosFake = [
@@ -176,7 +177,7 @@ function safeSetItem(key: string, value: any) {
 
 // ============ ASSISTIR VÍDEO ============
 function AssistirVideo({
-  video, todosVideos, onVoltar, onSelecionarVideo, usuario, logado,
+  video, todosVideos, comentariosBanco = {}, onVoltar, onSelecionarVideo, usuario, logado,
   inscricoes, usuarios, onCanalClick, curtidas, onToggleCurtida,
   onComentar, onLoginNecessario, onSeguir, onDeixarDeSeguir, views,
   onApagarVideo,
@@ -197,13 +198,19 @@ function AssistirVideo({
   useEffect(() => {
     const chave = `nosafee_comentarios_${video.id}`;
     const salvos = localStorage.getItem(chave);
-    if (salvos) setComentarios(JSON.parse(salvos));
-    else setComentarios([
-      { id: 1, autor: "@maria_silva", texto: "Muito bom!", tempo: "há 2 horas" },
-      { id: 2, autor: "@joao_gamer", texto: "Que jogada insana!", tempo: "há 5 horas" },
-    ]);
+    const doBanco = comentariosBanco[video.id] || [];
+    if (doBanco.length > 0) {
+      setComentarios(doBanco);
+    } else if (salvos) {
+      setComentarios(JSON.parse(salvos));
+    } else {
+      setComentarios([
+        { id: 1, autor: "@maria_silva", texto: "Muito bom!", tempo: "há 2 horas" },
+        { id: 2, autor: "@joao_gamer", texto: "Que jogada insana!", tempo: "há 5 horas" },
+      ]);
+    }
     setCarregouComentarios(true);
-  }, [video.id]);
+  }, [video.id, comentariosBanco]);
 
   useEffect(() => {
     if (!carregouComentarios) return;
@@ -335,11 +342,27 @@ function AssistirVideo({
                     <div className="flex justify-end gap-2 mt-3">
                       <button onClick={() => setComentario("")} className="px-4 py-1.5 rounded-full text-sm text-gray-300 hover:bg-[#272727] transition cursor-pointer">Cancelar</button>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (!logado) { onLoginNecessario(); return; }
                           const texto = comentario;
                           setComentarios([{ id: Date.now(), autor: usuario ? `@${usuario}` : "@anônimo", texto, tempo: "agora" }, ...comentarios]);
                           onComentar(video.id, texto);
+
+                          try {
+                            const { data: { user } } = await supabase.auth.getUser();
+                            const meuId = user?.id;
+                            if (meuId && typeof video.id === "string" && video.id.startsWith("db_")) {
+                              const idNum = parseInt(video.id.replace("db_", ""));
+                              if (!isNaN(idNum)) {
+                                await supabase.from("video_comments").insert({
+                                  video_id: idNum,
+                                  user_id: meuId,
+                                  texto,
+                                });
+                              }
+                            }
+                          } catch (err) { console.error("Erro comentar:", err); }
+
                           setComentario("");
                         }}
                         className="px-4 py-1.5 bg-[#e888d3] hover:bg-[#d176be] text-black rounded-full text-sm font-medium transition cursor-pointer"
@@ -426,6 +449,7 @@ export default function Home() {
   const [inscricoes, setInscricoes] = useState<string[]>([]);
   const [seguindoVistos, setSeguindoVistos] = useState<string[]>([]);
   const [curtidas, setCurtidas] = useState<{ [videoId: string]: string[] }>({});
+  const [comentariosBanco, setComentariosBanco] = useState<{ [videoId: string]: any[] }>({});
   const [views, setViews] = useState<{ [videoId: string]: number }>({});
   const [notificacoes, setNotificacoes] = useState<{ [userId: string]: any[] }>({});
   const [mostrarNotificacoes, setMostrarNotificacoes] = useState(false);
@@ -447,6 +471,7 @@ export default function Home() {
   const [planoSelecionado, setPlanoSelecionado] = useState<any>(null);
   const [etapaPagamento, setEtapaPagamento] = useState<"planos" | "pagamento">("planos");
 
+  const [videosBanco, setVideosBanco] = useState<any[]>([]);
   const [filmesUsuarios, setFilmesUsuarios] = useState<any[]>([]);
   const [mostrarUploadFilme, setMostrarUploadFilme] = useState(false);
   const [tituloFilmeInput, setTituloFilmeInput] = useState("");
@@ -511,17 +536,28 @@ export default function Home() {
 
   // ===== CARREGAR DO LOCALSTORAGE (só uma vez) =====
   useEffect(() => {
+    (async () => {
     const usuariosSalvos = localStorage.getItem("nosafee_usuarios");
     const usuariosData = usuariosSalvos ? JSON.parse(usuariosSalvos) : {};
     setUsuarios(usuariosData);
-    const logadoSalvo = localStorage.getItem("nosafee_logado");
-    if (logadoSalvo && usuariosData[logadoSalvo]) {
-      const userData = usuariosData[logadoSalvo];
-      setUsuario(logadoSalvo);
-      setLogado(true);
-      setPlanoAtual(userData.plano || "free");
-      setMeusVideos(userData.videos || []);
-      setInscricoes(userData.inscricoes || []);
+
+    // ============ VERIFICA SESSÃO DO SUPABASE ============
+    const { data: { session } } = await supabase.auth.getSession();
+    let logadoSalvo: string | null = null;
+
+    if (session?.user) {
+      const { data: meuProfile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
+        .single();
+
+      if (meuProfile) {
+        logadoSalvo = meuProfile.username;
+        setUsuario(meuProfile.username);
+        setLogado(true);
+        setPlanoAtual(meuProfile.plano || "free");
+      }
     }
     if (localStorage.getItem("nosafee_idade_ok") === "true") setIdadeVerificada(true);
 
@@ -586,8 +622,122 @@ export default function Home() {
 
     if (localStorage.getItem("nosafee_modo_claro") === "true") setModoClaro(true);
 
+    try {
+      const { data: todosProfiles } = await supabase.from("profiles").select("*");
+      if (todosProfiles) {
+        const mapa: any = {};
+        todosProfiles.forEach((p: any) => {
+          mapa[p.username] = {
+            ...(usuariosData[p.username] || {}),
+            email: p.email,
+            avatarUrl: p.avatar_url || "",
+            bio: p.bio || "",
+            plano: p.plano || "free",
+            idSupabase: p.id,
+          };
+        });
+        setUsuarios((prev: any) => ({ ...prev, ...mapa }));
+      }
+
+      const { data: todosVideos } = await supabase
+        .from("videos")
+        .select("*, profiles!videos_user_id_fkey(username, avatar_url)")
+        .order("created_at", { ascending: false });
+
+      if (todosVideos) {
+        const formatados = todosVideos.map((v: any) => ({
+          id: `db_${v.id}`,
+          dbId: v.id,
+          titulo: v.titulo,
+          descricao: v.descricao || "Sem descrição.",
+          url: v.url,
+          thumb: v.thumb || `https://picsum.photos/seed/db${v.id}/640/360`,
+          duracao: v.duracao || "00:00",
+          categoria: v.categoria || "Filmes",
+          canal: `@${v.profiles?.username || "desconhecido"}`,
+          views: `${v.views || 0} visualizações • recente`,
+          cor: "bg-pink-600",
+        }));
+        setVideosBanco(formatados);
+      }
+
+      if (logadoSalvo && usuariosData[logadoSalvo]) {
+        const meuProfile = todosProfiles?.find((p: any) => p.username === logadoSalvo);
+        if (meuProfile) {
+          const { data: followsData } = await supabase
+            .from("follows")
+            .select("profiles!follows_following_id_fkey(username)")
+            .eq("follower_id", meuProfile.id);
+          if (followsData) {
+            setInscricoes(followsData.map((f: any) => `@${f.profiles.username}`));
+          }
+        }
+      }
+
+      // Curtidas do banco
+      const { data: likesData } = await supabase
+        .from("video_likes")
+        .select("video_id, profiles!video_likes_user_id_fkey(username)");
+      if (likesData) {
+        const mapa: { [vid: string]: string[] } = {};
+        likesData.forEach((l: any) => {
+          const chave = `db_${l.video_id}`;
+          if (!mapa[chave]) mapa[chave] = [];
+          mapa[chave].push(l.profiles?.username || "");
+        });
+        setCurtidas((prev: any) => ({ ...prev, ...mapa }));
+      }
+
+      // Comentários do banco
+      const { data: commentsData } = await supabase
+        .from("video_comments")
+        .select("id, video_id, texto, created_at, profiles!video_comments_user_id_fkey(username)")
+        .order("created_at", { ascending: false });
+      if (commentsData) {
+        const mapa: { [vid: string]: any[] } = {};
+        commentsData.forEach((c: any) => {
+          const chave = `db_${c.video_id}`;
+          if (!mapa[chave]) mapa[chave] = [];
+          mapa[chave].push({
+            id: c.id,
+            autor: `@${c.profiles?.username || "anônimo"}`,
+            texto: c.texto,
+            tempo: "recente",
+            dbId: c.id,
+          });
+        });
+        setComentariosBanco(mapa);
+      }
+    } catch (err) {
+      console.error("Erro Supabase:", err);
+    }
+
     setCarregou(true);
     setCarregouIdade(true);
+    })();
+  }, []);
+
+  // ============ LISTENER DE SESSÃO ============
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT") {
+        setLogado(false);
+        setUsuario("");
+      }
+      if (event === "SIGNED_IN" && session?.user) {
+        const { data: meuProfile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+        if (meuProfile) {
+          setUsuario(meuProfile.username);
+          setLogado(true);
+          setPlanoAtual(meuProfile.plano || "free");
+        }
+      }
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   // ===== SALVAR NO LOCALSTORAGE =====
@@ -740,7 +890,7 @@ export default function Home() {
     const videosUsuarios: any[] = [];
     Object.values(usuarios).forEach((u: any) => { if (u.videos) videosUsuarios.push(...u.videos); });
     const map = new Map();
-    [...videosUsuarios, ...videosFake].forEach((v) => { if (!map.has(v.id)) map.set(v.id, v); });
+    [...videosBanco, ...videosUsuarios, ...videosFake].forEach((v) => { if (!map.has(v.id)) map.set(v.id, v); });
     return Array.from(map.values());
   };
 
@@ -760,7 +910,7 @@ export default function Home() {
     return count + (hash % 500) + 42;
   };
 
-  const toggleCurtida = (videoId: string) => {
+ const toggleCurtida = async (videoId: string) => {
     if (!logado || !usuario) { setModoAuth("login"); setMostrarLogin(true); return; }
     const jaCurtiu = (curtidas[videoId] || []).includes(usuario);
     setCurtidas((prev) => {
@@ -768,6 +918,22 @@ export default function Home() {
       if (atuais.includes(usuario)) return { ...prev, [videoId]: atuais.filter((u) => u !== usuario) };
       return { ...prev, [videoId]: [...atuais, usuario] };
     });
+
+    try {
+      const meuId = await getMeuIdSupabase();
+      if (meuId && typeof videoId === "string" && videoId.startsWith("db_")) {
+        const idNum = parseInt(videoId.replace("db_", ""));
+        if (!isNaN(idNum)) {
+          if (jaCurtiu) {
+            await supabase.from("video_likes").delete().eq("video_id", idNum).eq("user_id", meuId);
+          } else {
+            await supabase.from("video_likes").insert({ video_id: idNum, user_id: meuId });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Erro curtida:", err);
+    }
     if (!jaCurtiu) {
       const video = todosOsVideosDoSite().find((v) => v.id === videoId);
       if (!video) return;
@@ -776,6 +942,11 @@ export default function Home() {
         adicionarNotificacao(dono, { tipo: "curtida", de: usuario, videoId: video.id, videoTitulo: video.titulo, texto: `@${usuario} curtiu seu vídeo` });
       }
     }
+  };
+
+  const getMeuIdSupabase = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id || null;
   };
 
   const adicionarNotificacao = (paraUsuario: string, notif: any) => {
@@ -805,19 +976,33 @@ export default function Home() {
     setNotificacoes((prev) => ({ ...prev, [usuario]: (prev[usuario] || []).map((n) => n.id === id ? { ...n, lida: true } : n) }));
   };
 
-  const seguirCanal = (canal: string) => {
+  const seguirCanal = async (canal: string) => {
     if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
     if (inscricoes.includes(canal)) return;
     setInscricoes([...inscricoes, canal]);
+    try {
+      const meuProfile = await getMeuIdSupabase();
+      const alvoProfile = usuarios[canal.replace("@", "")]?.idSupabase;
+      if (meuProfile && alvoProfile) {
+        await supabase.from("follows").insert({ follower_id: meuProfile, following_id: alvoProfile });
+      }
+    } catch (err) { console.error("Erro seguir:", err); }
     const nomeCanal = canal.replace("@", "");
     if (usuarios[nomeCanal] && nomeCanal !== usuario) {
       adicionarNotificacao(nomeCanal, { tipo: "seguidor", de: usuario, texto: `@${usuario} começou a te seguir` });
     }
   };
 
-  const deixarDeSeguirCanal = (canal: string) => {
+  const deixarDeSeguirCanal = async (canal: string) => {
     setInscricoes(inscricoes.filter((c) => c !== canal));
     setSeguindoVistos(seguindoVistos.filter((c) => c !== canal));
+    try {
+      const meuProfile = await getMeuIdSupabase();
+      const alvoProfile = usuarios[canal.replace("@", "")]?.idSupabase;
+      if (meuProfile && alvoProfile) {
+        await supabase.from("follows").delete().eq("follower_id", meuProfile).eq("following_id", alvoProfile);
+      }
+    } catch (err) { console.error("Erro deixar de seguir:", err); }
   };
 
   const buscarUsuarios = (termo: string) => {
@@ -1056,19 +1241,27 @@ export default function Home() {
   };
 
   // ===== LOGIN / CADASTRO =====
-  const handleLogin = () => {
-    const nomeLimpo = usuario.trim().replace("@", "").toLowerCase();
-    if (nomeLimpo === "") { alert("Digite um nome de usuário!"); return; }
+  const handleLogin = async () => {
+    if (emailInput.trim() === "") { alert("Digite seu e-mail!"); return; }
     if (senhaInput.trim() === "") { alert("Digite sua senha!"); return; }
-    const usuarioExistente = usuarios[nomeLimpo];
-    if (!usuarioExistente) { alert("Usuário não encontrado! Crie uma conta primeiro."); return; }
-    if (usuarioExistente.senha !== senhaInput) { alert("Senha incorreta! Tente novamente."); return; }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: emailInput.trim(),
+      password: senhaInput,
+    });
+
+    if (error) { alert("Erro: " + error.message); return; }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", data.user.id)
+      .single();
+
+    const nomeLimpo = profile?.username || emailInput.split("@")[0];
     setUsuario(nomeLimpo);
-    setPlanoAtual(usuarioExistente.plano || "free");
-    setMeusVideos(usuarioExistente.videos || []);
-    setInscricoes(usuarioExistente.inscricoes || []);
+    setPlanoAtual(profile?.plano || "free");
     setLogado(true);
-    localStorage.setItem("nosafee_logado", nomeLimpo);
     setMostrarLogin(false);
     setSenhaInput("");
     setEmailInput("");
@@ -1077,16 +1270,20 @@ export default function Home() {
     alert("Bem-vindo de volta, @" + nomeLimpo + "!");
   };
 
-  const handleCriarConta = () => {
+  const handleCriarConta = async () => {
     const nomeLimpo = usuario.trim().replace("@", "").toLowerCase();
     if (nomeLimpo === "") { alert("Digite um nome de usuário!"); return; }
     if (emailInput.trim() === "") { alert("Digite um e-mail!"); return; }
     if (senhaInput.trim() === "") { alert("Digite uma senha!"); return; }
-    if (usuarios[nomeLimpo]) { alert("Este nome já está em uso! Escolha outro ou faça login."); return; }
-    const novoUsuarioObj = { senha: senhaInput, email: emailInput, plano: "free", videos: [], inscricoes: [], avatarUrl: "", bio: "", criadoEm: new Date().toISOString() };
-    const novoBanco = { ...usuarios, [nomeLimpo]: novoUsuarioObj };
-    setUsuarios(novoBanco);
-    localStorage.setItem("nosafee_usuarios", JSON.stringify(novoBanco));
+
+    const { data, error } = await supabase.auth.signUp({
+      email: emailInput.trim(),
+      password: senhaInput,
+      options: { data: { username: nomeLimpo } },
+    });
+
+    if (error) { alert("Erro: " + error.message); return; }
+
     setUsuario(nomeLimpo);
     setPlanoAtual("free");
     setMeusVideos([]);
@@ -1603,6 +1800,7 @@ export default function Home() {
             <AssistirVideo
               video={videoAssistindo}
               todosVideos={todosVideosLista}
+              comentariosBanco={comentariosBanco}
               onVoltar={() => setVideoAssistindo(null)}
               onSelecionarVideo={(v: any) => { setVideoAssistindo(v); if (mainRef.current) mainRef.current.scrollTop = 0; }}
               usuario={usuario}
@@ -1624,7 +1822,16 @@ export default function Home() {
               onSeguir={seguirCanal}
               onDeixarDeSeguir={deixarDeSeguirCanal}
               views={views}
-              onApagarVideo={(videoId: string) => {
+              onApagarVideo={async (videoId: string) => {
+                if (typeof videoId === "string" && videoId.startsWith("db_")) {
+                  const idNum = parseInt(videoId.replace("db_", ""));
+                  if (!isNaN(idNum)) {
+                    try {
+                      await supabase.from("videos").delete().eq("id", idNum);
+                      setVideosBanco((prev: any) => prev.filter((v: any) => v.id !== videoId));
+                    } catch (err) { console.error("Erro apagar:", err); }
+                  }
+                }
                 setMeusVideos((prev) => prev.filter((v) => v.id !== videoId));
                 setVideoAssistindo(null);
               }}
@@ -2176,7 +2383,7 @@ export default function Home() {
                     )}
                     <input type="text" placeholder="Título do vídeo" value={tituloModal} onChange={(e) => setTituloModal(e.target.value)} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-3 text-white outline-none focus:border-[#e888d3]" />
                     <textarea placeholder="Descrição (opcional)" rows={3} value={descModal} onChange={(e) => setDescModal(e.target.value)} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-4 text-white outline-none focus:border-[#e888d3]"></textarea>
-                    <button onClick={() => {
+                    <button onClick={async() => {
                       if (!tituloModal.trim()) { alert("Digite um título!"); return; }
                       if (!urlModal.trim()) { alert("Cole um link de vídeo!"); return; }
                       if (!urlVideoValida(urlModal)) {
@@ -2195,7 +2402,7 @@ export default function Home() {
                         thumbUrl = `https://img.youtube.com/vi/${matchYt[1]}/hqdefault.jpg`;
                       }
 
-                      setMeusVideos([{
+                      const novoVideoLocal = {
                         id: novoId,
                         titulo: tituloModal,
                         descricao: descModal || "Sem descrição.",
@@ -2206,8 +2413,41 @@ export default function Home() {
                         canal: `@${usuario}`,
                         views: "0 visualizações • agora",
                         cor: "bg-pink-600",
-                      }, ...meusVideos]);
+                      };
+                      setMeusVideos([novoVideoLocal, ...meusVideos]);
                       setViews((prev) => ({ ...prev, [novoId]: 0 }));
+                      try {
+                        const meuId = await getMeuIdSupabase();
+                        console.log("DEBUG salvar vídeo - meuId:", meuId);
+                        if (meuId) {
+                          const { data: salvo, error: erroSalvar } = await supabase.from("videos").insert({
+                            user_id: meuId,
+                            titulo: tituloModal,
+                            descricao: descModal || "Sem descrição.",
+                            url: linkLimpo,
+                            thumb: thumbUrl,
+                            categoria: catModal,
+                           }).select().single();
+
+                          console.log("DEBUG salvar vídeo - resultado:", salvo, "erro:", erroSalvar);
+
+                          if (salvo) {
+                            setVideosBanco((prev: any) => [{
+                              id: `db_${salvo.id}`,
+                              dbId: salvo.id,
+                              titulo: salvo.titulo,
+                              descricao: salvo.descricao,
+                              url: salvo.url,
+                              thumb: salvo.thumb,
+                              duracao: "00:00",
+                              categoria: salvo.categoria,
+                              canal: `@${usuario}`,
+                              views: "0 visualizações • agora",
+                              cor: "bg-pink-600",
+                            }, ...prev]);
+                          }
+                        }
+                      } catch (err) { console.error("Erro salvar vídeo:", err); }
                       setTituloModal(""); setDescModal(""); setUrlModal("");
                       alert("Vídeo publicado!");
                     }} className="w-full bg-[#e888d3] hover:bg-[#d176be] text-black font-bold py-2 rounded-full transition-all cursor-pointer">Publicar</button>
@@ -2236,9 +2476,18 @@ export default function Home() {
 
                           {/* Botão de apagar */}
                           <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
                               if (!confirm(`Apagar o vídeo "${v.titulo}"?`)) return;
+                              if (typeof v.id === "string" && v.id.startsWith("db_")) {
+                                const idNum = parseInt(v.id.replace("db_", ""));
+                                if (!isNaN(idNum)) {
+                                  try {
+                                    await supabase.from("videos").delete().eq("id", idNum);
+                                    setVideosBanco((prev: any) => prev.filter((x: any) => x.id !== v.id));
+                                  } catch (err) { console.error("Erro apagar:", err); }
+                                }
+                              }
                               setMeusVideos((prev) => prev.filter((x) => x.id !== v.id));
                             }}
                             className="absolute top-2 right-2 w-9 h-9 rounded-full bg-black/70 hover:bg-red-600 text-white flex items-center justify-center transition opacity-0 group-hover:opacity-100 cursor-pointer"
@@ -2545,8 +2794,10 @@ export default function Home() {
               </div>
             </div>
             <div className="p-6">
-              <input type="text" placeholder="Nome de usuário (@)" value={usuario} onChange={(e) => setUsuario(e.target.value.replace("@", "").toLowerCase())} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-3 text-white outline-none focus:border-[#e888d3]" />
-              {modoAuth === "cadastro" && <input type="email" placeholder="E-mail" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-3 text-white outline-none focus:border-[#e888d3]" />}
+              {modoAuth === "cadastro" && (
+                <input type="text" placeholder="Nome de usuário (@)" value={usuario} onChange={(e) => setUsuario(e.target.value.replace("@", "").toLowerCase())} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-3 text-white outline-none focus:border-[#e888d3]" />
+              )}
+              <input type="email" placeholder="E-mail" value={emailInput} onChange={(e) => setEmailInput(e.target.value)} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-3 text-white outline-none focus:border-[#e888d3]" />
               <input type="password" placeholder="Senha" value={senhaInput} onChange={(e) => setSenhaInput(e.target.value)} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-4 text-white outline-none focus:border-[#e888d3]" />
               {modoAuth === "login" ? (
                 <>
@@ -2811,7 +3062,7 @@ export default function Home() {
                 )}
                 <input type="text" placeholder="Título" value={tituloModal} onChange={(e) => setTituloModal(e.target.value)} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-3 text-white outline-none focus:border-[#e888d3]" />
                 <textarea placeholder="Descrição" rows={3} value={descModal} onChange={(e) => setDescModal(e.target.value)} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-4 text-white outline-none focus:border-[#e888d3]"></textarea>
-                              <button onClick={() => {
+                              <button onClick={async() => {
                   if (!tituloModal.trim()) { alert("Digite um título!"); return; }
                   if (!urlModal.trim()) { alert("Cole um link de vídeo!"); return; }
                   if (!urlVideoValida(urlModal)) {
