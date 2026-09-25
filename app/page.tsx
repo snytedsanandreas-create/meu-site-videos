@@ -478,7 +478,10 @@ export default function Home() {
   const [anoFilmeInput, setAnoFilmeInput] = useState("");
   const [imdbFilmeInput, setImdbFilmeInput] = useState("");
 
+  const [memesBanco, setMemesBanco] = useState<any[]>([]);
   const [memesUsuarios, setMemesUsuarios] = useState<any[]>([]);
+  const [votosBanco, setVotosBanco] = useState<{ [id: string]: { [user: string]: "like" | "dislike" } }>({});
+  const [comentariosMemesBanco, setComentariosMemesBanco] = useState<{ [id: string]: any[] }>({});
   const [mostrarUploadMeme, setMostrarUploadMeme] = useState(false);
   const [tituloMemeInput, setTituloMemeInput] = useState("");
   const [imgMemeInput, setImgMemeInput] = useState("");
@@ -707,6 +710,60 @@ export default function Home() {
           });
         });
         setComentariosBanco(mapa);
+      }
+
+      // ============ MEMES DO BANCO ============
+      const { data: memesData } = await supabase
+        .from("memes")
+        .select("*, profiles!memes_user_id_fkey(username)")
+        .order("created_at", { ascending: false });
+      if (memesData) {
+        setMemesBanco(memesData.map((m: any) => ({
+          id: `db_meme_${m.id}`,
+          dbId: m.id,
+          titulo: m.titulo,
+          thumb: m.thumb,
+          autor: `@${m.profiles?.username || "anônimo"}`,
+          likes: 0,
+          dislikes: 0,
+          comentarios: 0,
+          timestamp: new Date(m.created_at).getTime(),
+        })));
+      }
+
+      // Votos em memes
+      const { data: votosData } = await supabase
+        .from("meme_votes")
+        .select("meme_id, tipo, profiles!meme_votes_user_id_fkey(username)");
+      if (votosData) {
+        const mapaVotos: { [id: string]: { [user: string]: "like" | "dislike" } } = {};
+        votosData.forEach((v: any) => {
+          const chave = `db_meme_${v.meme_id}`;
+          if (!mapaVotos[chave]) mapaVotos[chave] = {};
+          mapaVotos[chave][v.profiles?.username || ""] = v.tipo;
+        });
+        setVotosBanco(mapaVotos);
+      }
+
+      // Comentários de memes
+      const { data: comentariosMemesData } = await supabase
+        .from("meme_comments")
+        .select("id, meme_id, texto, created_at, profiles!meme_comments_user_id_fkey(username)")
+        .order("created_at", { ascending: false });
+      if (comentariosMemesData) {
+        const mapa: { [id: string]: any[] } = {};
+        comentariosMemesData.forEach((c: any) => {
+          const chave = `db_meme_${c.meme_id}`;
+          if (!mapa[chave]) mapa[chave] = [];
+          mapa[chave].push({
+            id: c.id,
+            autor: c.profiles?.username || "anônimo",
+            texto: c.texto,
+            timestamp: new Date(c.created_at).getTime(),
+            dbId: c.id,
+          });
+        });
+        setComentariosMemesBanco(mapa);
       }
     } catch (err) {
       console.error("Erro Supabase:", err);
@@ -1338,7 +1395,7 @@ export default function Home() {
   };
 
   const todosOsFilmes = [...filmesUsuarios, ...filmes];
-  const todosOsMemes = [...memesUsuarios, ...memesFake];
+  const todosOsMemes = [...memesBanco, ...memesUsuarios, ...memesFake];
   const todosVideosLista = todosOsVideosDoSite();
   const naoVistosSeguindo = inscricoes.filter((c) => !seguindoVistos.includes(c)).length;
   const viewsDoVideo = (v: any) => {
@@ -2003,7 +2060,7 @@ export default function Home() {
                       <div className="px-4 py-3">
                         <p className="text-sm text-gray-200 mb-4">{meme.titulo}</p>
                         <div className="flex items-center gap-4">
-                          <button onClick={() => {
+                          <button onClick={async () => {
                             if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
                             setMemeCurtidas((prev) => {
                               const atuais = prev[meme.id] || [];
@@ -2011,11 +2068,25 @@ export default function Home() {
                               return { ...prev, [meme.id]: [...atuais, usuario] };
                             });
                             if (!curtiu) setMemeDislikes((prev) => ({ ...prev, [meme.id]: (prev[meme.id] || []).filter((u) => u !== usuario) }));
+
+                            try {
+                              const { data: { user } } = await supabase.auth.getUser();
+                              if (user && typeof meme.id === "string" && meme.id.startsWith("db_meme_")) {
+                                const idNum = parseInt(meme.id.replace("db_meme_", ""));
+                                if (!isNaN(idNum)) {
+                                  if (curtiu) {
+                                    await supabase.from("meme_votes").delete().eq("meme_id", idNum).eq("user_id", user.id);
+                                  } else {
+                                    await supabase.from("meme_votes").upsert({ meme_id: idNum, user_id: user.id, tipo: "like" }, { onConflict: "meme_id,user_id" });
+                                  }
+                                }
+                              }
+                            } catch (err) { console.error("Erro voto:", err); }
                           }} className={`flex items-center gap-2 transition cursor-pointer ${curtiu ? "text-[#e888d3]" : "text-gray-400 hover:text-white"}`}>
                             <span className="material-icons-outlined text-2xl">{curtiu ? "favorite" : "favorite_border"}</span>
                             <span className="text-sm font-medium">{totalLikes.toLocaleString("pt-BR")}</span>
                           </button>
-                          <button onClick={() => {
+                          <button onClick={async () => {
                             if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
                             setMemeDislikes((prev) => {
                               const atuais = prev[meme.id] || [];
@@ -2023,6 +2094,20 @@ export default function Home() {
                               return { ...prev, [meme.id]: [...atuais, usuario] };
                             });
                             if (!dislikei) setMemeCurtidas((prev) => ({ ...prev, [meme.id]: (prev[meme.id] || []).filter((u) => u !== usuario) }));
+
+                            try {
+                              const { data: { user } } = await supabase.auth.getUser();
+                              if (user && typeof meme.id === "string" && meme.id.startsWith("db_meme_")) {
+                                const idNum = parseInt(meme.id.replace("db_meme_", ""));
+                                if (!isNaN(idNum)) {
+                                  if (dislikei) {
+                                    await supabase.from("meme_votes").delete().eq("meme_id", idNum).eq("user_id", user.id);
+                                  } else {
+                                    await supabase.from("meme_votes").upsert({ meme_id: idNum, user_id: user.id, tipo: "dislike" }, { onConflict: "meme_id,user_id" });
+                                  }
+                                }
+                              }
+                            } catch (err) { console.error("Erro voto:", err); }
                           }} className={`flex items-center gap-2 transition cursor-pointer ${dislikei ? "text-red-500" : "text-gray-400 hover:text-white"}`}>
                             <span className="material-icons-outlined text-2xl">thumb_down</span>
                             <span className="text-sm font-medium">{totalDislikes}</span>
@@ -2055,19 +2140,43 @@ export default function Home() {
                           </div>
                           {logado && (
                             <div className="flex gap-2 p-3 border-t border-[#303030]">
-                              <input type="text" placeholder="Escreva um comentário..." value={textoComentarioMeme} onChange={(e) => setTextoComentarioMeme(e.target.value)} onKeyDown={(e) => {
+                              <input type="text" placeholder="Escreva um comentário..." value={textoComentarioMeme} onChange={(e) => setTextoComentarioMeme(e.target.value)} onKeyDown={async (e) => {
                                 if (e.key === "Enter" && !e.shiftKey) {
                                   e.preventDefault();
                                   if (!textoComentarioMeme.trim()) return;
-                                  const novo = { id: Date.now(), autor: usuario, texto: textoComentarioMeme.trim(), timestamp: Date.now() };
+                                  const texto = textoComentarioMeme.trim();
+                                  const novo = { id: Date.now(), autor: usuario, texto, timestamp: Date.now() };
                                   setComentariosMemes((prev) => ({ ...prev, [meme.id]: [novo, ...(prev[meme.id] || [])] }));
+
+                                  try {
+                                    const { data: { user } } = await supabase.auth.getUser();
+                                    if (user && typeof meme.id === "string" && meme.id.startsWith("db_meme_")) {
+                                      const idNum = parseInt(meme.id.replace("db_meme_", ""));
+                                      if (!isNaN(idNum)) {
+                                        await supabase.from("meme_comments").insert({ meme_id: idNum, user_id: user.id, texto });
+                                      }
+                                    }
+                                  } catch (err) { console.error("Erro comentar meme:", err); }
+
                                   setTextoComentarioMeme("");
                                 }
                               }} className="flex-1 bg-[#0f0f0f] border border-[#303030] rounded-full px-3 py-1.5 text-sm text-white outline-none focus:border-[#e888d3]" />
-                              <button onClick={() => {
+                              <button onClick={async () => {
                                 if (!textoComentarioMeme.trim()) return;
-                                const novo = { id: Date.now(), autor: usuario, texto: textoComentarioMeme.trim(), timestamp: Date.now() };
+                                const texto = textoComentarioMeme.trim();
+                                const novo = { id: Date.now(), autor: usuario, texto, timestamp: Date.now() };
                                 setComentariosMemes((prev) => ({ ...prev, [meme.id]: [novo, ...(prev[meme.id] || [])] }));
+
+                                try {
+                                  const { data: { user } } = await supabase.auth.getUser();
+                                  if (user && typeof meme.id === "string" && meme.id.startsWith("db_meme_")) {
+                                    const idNum = parseInt(meme.id.replace("db_meme_", ""));
+                                    if (!isNaN(idNum)) {
+                                      await supabase.from("meme_comments").insert({ meme_id: idNum, user_id: user.id, texto });
+                                    }
+                                  }
+                                } catch (err) { console.error("Erro comentar meme:", err); }
+
                                 setTextoComentarioMeme("");
                               }} className="w-8 h-8 rounded-full bg-[#e888d3] flex items-center justify-center cursor-pointer">
                                 <span className="material-icons-outlined text-black text-sm">send</span>
@@ -2943,11 +3052,35 @@ export default function Home() {
                 <img src={imgMemeInput} alt="preview" className="w-full max-h-48 object-contain bg-black" />
               </div>
             )}
-            <button onClick={() => {
+            <button onClick={async () => {
               if (!tituloMemeInput.trim()) { alert("Digite um título!"); return; }
               if (!imgMemeInput) { alert("Escolha uma imagem!"); return; }
-              const novo = { id: `meme_${Date.now()}`, titulo: tituloMemeInput.trim(), thumb: imgMemeInput, autor: `@${usuario}`, likes: 0, dislikes: 0, comentarios: 0 };
-              setMemesUsuarios([novo, ...memesUsuarios]);
+
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                  const { data: salvo } = await supabase.from("memes").insert({
+                    user_id: user.id,
+                    titulo: tituloMemeInput.trim(),
+                    thumb: imgMemeInput,
+                  }).select().single();
+
+                  if (salvo) {
+                    setMemesBanco((prev: any) => [{
+                      id: `db_meme_${salvo.id}`,
+                      dbId: salvo.id,
+                      titulo: salvo.titulo,
+                      thumb: salvo.thumb,
+                      autor: `@${usuario}`,
+                      likes: 0,
+                      dislikes: 0,
+                      comentarios: 0,
+                      timestamp: new Date(salvo.created_at).getTime(),
+                    }, ...prev]);
+                  }
+                }
+              } catch (err) { console.error("Erro salvar meme:", err); }
+
               setTituloMemeInput(""); setImgMemeInput(""); setArquivoMeme(null); setMostrarUploadMeme(false);
               alert("Meme postado!");
             }} className="w-full bg-[#e888d3] hover:bg-[#d176be] text-black font-bold py-2 rounded-full transition-all cursor-pointer">Postar meme</button>
