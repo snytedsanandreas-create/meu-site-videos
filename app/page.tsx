@@ -510,6 +510,7 @@ export default function Home() {
   const [modoClaro, setModoClaro] = useState(false);
   const [posters, setPosters] = useState<{ [id: string]: string }>({});
   const [recados, setRecados] = useState<{ [usuario: string]: any[] }>({});
+  const [recadosBanco, setRecadosBanco] = useState<{ [usuario: string]: any[] }>({});
   const [textoRecado, setTextoRecado] = useState("");
   const [mostrarEmojisRecado, setMostrarEmojisRecado] = useState(false);
   const [imagemRecado, setImagemRecado] = useState("");
@@ -599,8 +600,7 @@ export default function Home() {
     const comentariosMemesSalvos = localStorage.getItem("nosafee_comentarios_memes");
     if (comentariosMemesSalvos) setComentariosMemes(JSON.parse(comentariosMemesSalvos));
 
-    const recadosSalvos = localStorage.getItem("nosafee_recados");
-    if (recadosSalvos) setRecados(JSON.parse(recadosSalvos));
+    // (recados agora vêm do Supabase)
 
     // (solicitações agora vêm do Supabase)
 
@@ -765,6 +765,42 @@ export default function Home() {
         setComentariosMemesBanco(mapa);
       }
 
+      // ============ RECADOS DO BANCO ============
+      const { data: recadosData, error: erroRecados } = await supabase
+        .from("recados")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (erroRecados) console.error("ERRO recados:", erroRecados);
+
+      if (recadosData) {
+        const idsUsers = new Set<string>();
+        recadosData.forEach((r: any) => { idsUsers.add(r.user_id); idsUsers.add(r.mural_id); });
+
+        const { data: profilesRec } = await supabase
+          .from("profiles")
+          .select("id, username")
+          .in("id", Array.from(idsUsers));
+
+        const mapa: { [id: string]: string } = {};
+        (profilesRec || []).forEach((p: any) => { mapa[p.id] = p.username; });
+
+        const agrupados: { [usuario: string]: any[] } = {};
+        recadosData.forEach((r: any) => {
+          const donoMural = mapa[r.mural_id] || "desconhecido";
+          if (!agrupados[donoMural]) agrupados[donoMural] = [];
+          agrupados[donoMural].push({
+            id: `db_recado_${r.id}`,
+            dbId: r.id,
+            autor: mapa[r.user_id] || "desconhecido",
+            texto: r.texto || "",
+            imagem: r.imagem || null,
+            timestamp: new Date(r.created_at).getTime(),
+          });
+        });
+        setRecadosBanco(agrupados);
+      }
+
       // ============ MENSAGENS DO BANCO ============
       if (session?.user) {
         const { data: mensagensData, error: erroMsg } = await supabase
@@ -860,7 +896,7 @@ export default function Home() {
   useEffect(() => { if (carregou) safeSetItem("nosafee_meme_curtidas", memeCurtidas); }, [memeCurtidas, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_meme_dislikes", memeDislikes); }, [memeDislikes, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_comentarios_memes", comentariosMemes); }, [comentariosMemes, carregou]);
-  useEffect(() => { if (carregou) safeSetItem("nosafee_recados", recados); }, [recados, carregou]);
+  // (recados agora vão pro Supabase)
   useEffect(() => { if (carregou) safeSetItem("nosafee_modo_claro", modoClaro); }, [modoClaro, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_solicitacoes", solicitacoes); }, [solicitacoes, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_posts", postsUsuarios); }, [postsUsuarios, carregou]);
@@ -2303,7 +2339,7 @@ export default function Home() {
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-[#303030]">
                   <span className="material-icons-outlined text-[#e888d3]">sticky_note_2</span>
                   <h2 className="font-bold">Recados</h2>
-                  <span className="text-xs text-gray-500 ml-auto">{usuario ? (recados[usuario]?.length || 0) : 0} no mural</span>
+                  <span className="text-xs text-gray-500 ml-auto">{usuario ? (recadosBanco[usuario]?.length || 0) : 0} no mural</span>
                 </div>
 
                 <div className="p-5">
@@ -2348,11 +2384,37 @@ export default function Home() {
                             }} className="hidden" />
                           </label>
                         </div>
-                        <button onClick={() => {
+                        <button onClick={async () => {
                           if (!textoRecado.trim() && !imagemRecado) return;
-                          const novo = { id: Date.now(), autor: usuario, texto: textoRecado.trim(), imagem: imagemRecado || null, timestamp: Date.now() };
-                          setRecados((prev) => ({ ...prev, [usuario]: [novo, ...(prev[usuario] || [])] }));
+                          const texto = textoRecado.trim();
+                          const img = imagemRecado || null;
                           setTextoRecado(""); setImagemRecado(""); setMostrarEmojisRecado(false);
+
+                          try {
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (!user) { alert("Faça login primeiro"); return; }
+
+                            const { data: salvo, error: erro } = await supabase.from("recados").insert({
+                              user_id: user.id,
+                              mural_id: user.id,
+                              texto: texto || null,
+                              imagem: img,
+                            }).select().single();
+
+                            if (erro) { console.error("Erro recado:", erro); return; }
+
+                            if (salvo) {
+                              const novo = {
+                                id: `db_recado_${salvo.id}`,
+                                dbId: salvo.id,
+                                autor: usuario,
+                                texto: texto || "",
+                                imagem: img,
+                                timestamp: new Date(salvo.created_at).getTime(),
+                              };
+                              setRecadosBanco((prev) => ({ ...prev, [usuario]: [novo, ...(prev[usuario] || [])] }));
+                            }
+                          } catch (err) { console.error("Erro salvar recado:", err); }
                         }} className="bg-[#e888d3] hover:bg-[#d176be] text-black text-sm font-bold px-4 py-1.5 rounded-full transition cursor-pointer">Enviar recado</button>
                       </div>
                     </>
@@ -2362,8 +2424,8 @@ export default function Home() {
                 </div>
 
                 <div className="border-t border-[#303030]">
-                  {usuario && (recados[usuario]?.length || 0) > 0 ? (
-                    recados[usuario].map((r: any) => (
+                  {usuario && (recadosBanco[usuario]?.length || 0) > 0 ? (
+                    recadosBanco[usuario].map((r: any) => (
                       <div key={r.id} className="p-4 flex gap-3 border-b border-[#252525] last:border-b-0">
                         <div onClick={() => abrirCanal(`@${r.autor}`)} className="cursor-pointer flex-shrink-0">
                           {usuarios[r.autor]?.avatarUrl ? (
