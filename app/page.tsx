@@ -2445,11 +2445,11 @@ export default function Home() {
         .modo-claro [class*="border-[#2a2a2a]"] { border-color: #d0d3d8 !important; }
         .modo-claro [class*="border-[#252525]"] { border-color: #e4e6eb !important; }
 
-        .modo-claro [class*="text-white"] { color: #1a1a1a !important; }
-        .modo-claro [class*="text-gray-300"] { color: #4a4a4a !important; }
-        .modo-claro [class*="text-gray-400"] { color: #65676b !important; }
-        .modo-claro [class*="text-gray-200"] { color: #3a3a3a !important; }
-        .modo-claro [class*="text-gray-500"] { color: #888 !important; }
+        .modo-claro .text-white { color: #1a1a1a !important; }
+        .modo-claro .text-gray-300 { color: #4a4a4a !important; }
+        .modo-claro .text-gray-400 { color: #65676b !important; }
+        .modo-claro .text-gray-200 { color: #3a3a3a !important; }
+        .modo-claro .text-gray-500 { color: #888 !important; }
 
         .modo-claro input, .modo-claro textarea, .modo-claro select {
           background-color: #ffffff !important;
