@@ -434,6 +434,7 @@ export default function Home() {
   const [conversaAtiva, setConversaAtiva] = useState<string | null>(null);
   const [textoMensagem, setTextoMensagem] = useState("");
   const [todasMensagens, setTodasMensagens] = useState<{ [key: string]: any[] }>({});
+  const [mensagensBanco, setMensagensBanco] = useState<any[]>([]);
   const [logado, setLogado] = useState(false);
   const [usuario, setUsuario] = useState("");
   const [senhaInput, setSenhaInput] = useState("");
@@ -564,8 +565,7 @@ export default function Home() {
     }
     if (localStorage.getItem("nosafee_idade_ok") === "true") setIdadeVerificada(true);
 
-    const mensagensSalvas = localStorage.getItem("nosafee_mensagens");
-    if (mensagensSalvas) setTodasMensagens(JSON.parse(mensagensSalvas));
+    // (mensagens agora vêm do Supabase)
 
     const curtidasSalvas = localStorage.getItem("nosafee_curtidas");
     if (curtidasSalvas) setCurtidas(JSON.parse(curtidasSalvas));
@@ -602,8 +602,7 @@ export default function Home() {
     const recadosSalvos = localStorage.getItem("nosafee_recados");
     if (recadosSalvos) setRecados(JSON.parse(recadosSalvos));
 
-    const solicitacoesSalvas = localStorage.getItem("nosafee_solicitacoes");
-    if (solicitacoesSalvas) setSolicitacoes(JSON.parse(solicitacoesSalvas));
+    // (solicitações agora vêm do Supabase)
 
     const postsSalvos = localStorage.getItem("nosafee_posts");
     if (postsSalvos) setPostsUsuarios(JSON.parse(postsSalvos));
@@ -765,6 +764,51 @@ export default function Home() {
         });
         setComentariosMemesBanco(mapa);
       }
+
+      // ============ MENSAGENS DO BANCO ============
+      if (session?.user) {
+        const { data: mensagensData, error: erroMsg } = await supabase
+          .from("messages")
+          .select("*")
+          .or(`from_id.eq.${session.user.id},to_id.eq.${session.user.id}`)
+          .order("created_at", { ascending: true });
+
+        if (erroMsg) {
+          console.error("ERRO ao carregar mensagens:", erroMsg);
+        }
+
+        if (mensagensData && mensagensData.length > 0) {
+          // Busca os usernames de todos os envolvidos
+          const idsUsuarios = new Set<string>();
+          mensagensData.forEach((m: any) => {
+            idsUsuarios.add(m.from_id);
+            idsUsuarios.add(m.to_id);
+          });
+
+          const { data: profilesMsg, error: erroProf } = await supabase
+            .from("profiles")
+            .select("id, username")
+            .in("id", Array.from(idsUsuarios));
+
+          if (erroProf) {
+            console.error("ERRO ao buscar usernames:", erroProf);
+          }
+
+          const mapaUsernames: { [id: string]: string } = {};
+          (profilesMsg || []).forEach((p: any) => { mapaUsernames[p.id] = p.username; });
+
+          const formatadas = mensagensData.map((m: any) => ({
+            ...m,
+            from_profile: { username: mapaUsernames[m.from_id] || "?" },
+            to_profile: { username: mapaUsernames[m.to_id] || "?" },
+          }));
+
+          console.log("DEBUG mensagens carregadas:", formatadas);
+          setMensagensBanco(formatadas);
+        } else {
+          console.log("DEBUG: nenhuma mensagem encontrada para o user", session.user.id);
+        }
+      }
     } catch (err) {
       console.error("Erro Supabase:", err);
     }
@@ -807,7 +851,7 @@ export default function Home() {
     });
   }, [planoAtual, meusVideos, inscricoes, usuario, logado, carregou]);
 
-  useEffect(() => { if (carregou) safeSetItem("nosafee_mensagens", todasMensagens); }, [todasMensagens, carregou]);
+  // (mensagens agora vão pro Supabase, não pro localStorage)
   useEffect(() => { if (carregou) safeSetItem("nosafee_curtidas", curtidas); }, [curtidas, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_views", views); }, [views, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_notificacoes", notificacoes); }, [notificacoes, carregou]);
@@ -1112,11 +1156,13 @@ export default function Home() {
     });
     const mutuos = inscricoes.filter((canal) => { const nomeLimpo = canal.replace("@", ""); return meusSeguidores.includes(nomeLimpo); }).map((canal) => canal.replace("@", ""));
 
+    // Contatos com conversa no banco
     const comConversa: string[] = [];
-    Object.keys(todasMensagens).forEach((chave) => {
-      const [a, b] = chave.split("__");
-      if (a === usuario && b !== usuario) comConversa.push(b);
-      else if (b === usuario && a !== usuario) comConversa.push(a);
+    mensagensBanco.forEach((m: any) => {
+      const de = m.from_profile?.username;
+      const para = m.to_profile?.username;
+      if (de === usuario && para) comConversa.push(para);
+      else if (para === usuario && de) comConversa.push(de);
     });
 
     return Array.from(new Set([...mutuos, ...comConversa]));
@@ -1124,83 +1170,90 @@ export default function Home() {
 
   const getMinhasSolicitacoes = () => {
     if (!usuario) return [];
-    const minhas = solicitacoes[usuario] || [];
+    // Solicitações = mensagens recebidas de quem eu NÃO sigo
     const porRemetente: { [de: string]: any[] } = {};
-    minhas.forEach((s) => {
-      if (!porRemetente[s.de]) porRemetente[s.de] = [];
-      porRemetente[s.de].push(s);
+    mensagensBanco.forEach((m: any) => {
+      const de = m.from_profile?.username;
+      const para = m.to_profile?.username;
+      if (para === usuario && de && !inscricoes.includes(`@${de}`)) {
+        if (!porRemetente[de]) porRemetente[de] = [];
+        porRemetente[de].push({
+          id: m.id,
+          de,
+          para,
+          texto: m.texto,
+          timestamp: new Date(m.created_at).getTime(),
+        });
+      }
     });
     return Object.entries(porRemetente).map(([de, msgs]) => ({ de, msgs }));
   };
 
   const getMensagens = (outroUsuario: string) => {
     if (!usuario) return [];
-    return todasMensagens[getChaveConversa(usuario, outroUsuario)] || [];
-  };
-
-  const enviarMensagem = (outroUsuario: string) => {
-    if (!textoMensagem.trim() || !usuario) return;
-    const outroSegueVoce = usuarios[outroUsuario]?.inscricoes?.includes(`@${usuario}`);
-
-    if (outroSegueVoce) {
-      const chave = getChaveConversa(usuario, outroUsuario);
-      const novaMsg = { de: usuario, para: outroUsuario, texto: textoMensagem.trim(), timestamp: Date.now(), lida: false };
-      setTodasMensagens((prev) => ({ ...prev, [chave]: [...(prev[chave] || []), novaMsg] }));
-    } else {
-      const novaSol = {
-        id: Date.now() + Math.random(),
-        de: usuario,
-        para: outroUsuario,
-        texto: textoMensagem.trim(),
-        timestamp: Date.now(),
-      };
-      setSolicitacoes((prev) => ({
-        ...prev,
-        [outroUsuario]: [...(prev[outroUsuario] || []), novaSol],
+    return mensagensBanco
+      .filter((m: any) => {
+        const de = m.from_profile?.username;
+        const para = m.to_profile?.username;
+        return (de === usuario && para === outroUsuario) || (de === outroUsuario && para === usuario);
+      })
+      .map((m: any) => ({
+        de: m.from_profile?.username,
+        para: m.to_profile?.username,
+        texto: m.texto,
+        timestamp: new Date(m.created_at).getTime(),
+        lida: m.lida,
       }));
-    }
-    setTextoMensagem("");
   };
 
-  const confirmarSolicitacao = (deUsuario: string) => {
+  const enviarMensagem = async (outroUsuario: string) => {
+    if (!textoMensagem.trim() || !usuario) return;
+    const texto = textoMensagem.trim();
+    setTextoMensagem("");
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const outroId = usuarios[outroUsuario]?.idSupabase;
+
+      if (user && outroId) {
+        const { data: novaMsg } = await supabase.from("messages").insert({
+          from_id: user.id,
+          to_id: outroId,
+          texto,
+        }).select("*, from_profile:profiles!messages_from_id_fkey(username), to_profile:profiles!messages_to_id_fkey(username)").single();
+
+        if (novaMsg) {
+          setMensagensBanco((prev) => [...prev, novaMsg]);
+        }
+      } else {
+        alert("Não foi possível enviar a mensagem. Verifique se o destinatário existe.");
+      }
+    } catch (err) {
+      console.error("Erro enviar mensagem:", err);
+    }
+  };
+
+  const confirmarSolicitacao = async (deUsuario: string) => {
     if (!usuario) return;
-    const minhasSols = solicitacoes[usuario] || [];
-    const doUsuario = minhasSols.filter((s) => s.de === deUsuario);
-    if (doUsuario.length === 0) return;
 
-    const chave = getChaveConversa(usuario, deUsuario);
-    setTodasMensagens((prev) => ({
-      ...prev,
-      [chave]: [
-        ...(prev[chave] || []),
-        ...doUsuario.map((s) => ({
-          de: s.de,
-          para: s.para,
-          texto: s.texto,
-          timestamp: s.timestamp,
-          lida: false,
-        })),
-      ],
-    }));
-
-    setSolicitacoes((prev) => ({
-      ...prev,
-      [usuario]: (prev[usuario] || []).filter((s) => s.de !== deUsuario),
-    }));
-
+    // Segue o usuário automaticamente
     if (!inscricoes.includes(`@${deUsuario}`)) {
-      setInscricoes([...inscricoes, `@${deUsuario}`]);
+      await seguirCanal(`@${deUsuario}`);
     }
 
     setConversaAtiva(deUsuario);
   };
 
-  const recusarSolicitacao = (deUsuario: string) => {
+  const recusarSolicitacao = async (deUsuario: string) => {
     if (!usuario) return;
-    setSolicitacoes((prev) => ({
-      ...prev,
-      [usuario]: (prev[usuario] || []).filter((s) => s.de !== deUsuario),
-    }));
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const deId = usuarios[deUsuario]?.idSupabase;
+      if (user && deId) {
+        await supabase.from("messages").delete().eq("from_id", deId).eq("to_id", user.id);
+        setMensagensBanco((prev) => prev.filter((m: any) => !(m.from_profile?.username === deUsuario && m.to_profile?.username === usuario)));
+      }
+    } catch (err) { console.error("Erro recusar:", err); }
   };
 
   const abrirConversaCom = (canalNome: string) => {
@@ -1211,21 +1264,23 @@ export default function Home() {
     marcarComoLida(nomeLimpo);
   };
 
-  const marcarComoLida = (outroUsuario: string) => {
+  const marcarComoLida = async (outroUsuario: string) => {
     if (!usuario) return;
-    const chave = getChaveConversa(usuario, outroUsuario);
-    setTodasMensagens((prev) => {
-      const msgs = prev[chave] || [];
-      const atualizadas = msgs.map((m) => m.para === usuario ? { ...m, lida: true } : m);
-      return { ...prev, [chave]: atualizadas };
-    });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const deId = usuarios[outroUsuario]?.idSupabase;
+      if (user && deId) {
+        await supabase.from("messages").update({ lida: true }).eq("from_id", deId).eq("to_id", user.id).eq("lida", false);
+        setMensagensBanco((prev) => prev.map((m: any) =>
+          m.from_profile?.username === outroUsuario && m.to_profile?.username === usuario ? { ...m, lida: true } : m
+        ));
+      }
+    } catch (err) { console.error("Erro marcar lida:", err); }
   };
 
   const getTotalNaoLidas = () => {
     if (!usuario) return 0;
-    let count = 0;
-    Object.values(todasMensagens).forEach((msgs: any) => { msgs.forEach((m: any) => { if (m.para === usuario && !m.lida) count++; }); });
-    return count;
+    return mensagensBanco.filter((m: any) => m.to_profile?.username === usuario && !m.lida).length;
   };
 
   const irParaInicio = () => { setAbaAtiva("inicio"); setVideoAssistindo(null); setCanalSelecionado(null); setFilmeSelecionado(null); setBusca(""); setCategoriaAtiva("Todas"); setPostAberto(null); };
