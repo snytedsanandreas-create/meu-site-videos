@@ -1242,7 +1242,7 @@ export default function Home() {
                     <div className="px-4 py-2 text-[10px] text-gray-500 uppercase tracking-wider border-b border-[#303030] bg-[#161616] sticky top-0 flex items-center gap-2">
                       <span className="material-icons-outlined text-sm">person</span> Canais ({users.length})
                     </div>
-                    {users.map((nome) => {
+                    {users.map((nome: any) => {
                       const info = getCanalInfo(`@${nome}`);
                       const videos = getVideosDoCanal(`@${nome}`);
                       return (
@@ -1259,7 +1259,7 @@ export default function Home() {
                     <div className="px-4 py-2 text-[10px] text-gray-500 uppercase tracking-wider border-b border-[#303030] bg-[#161616] sticky top-0 flex items-center gap-2">
                       <span className="material-icons-outlined text-sm">movie</span> Filmes ({films.length})
                     </div>
-                    {films.map((f) => (
+                    {films.map((f: any) => (
                       <div key={`filme-${f.id}`} onClick={() => { setFilmeSelecionado(f); setMostrarSugestoes(false); setBusca(""); }} className="flex items-center gap-3 px-4 py-2 hover:bg-[#272727] cursor-pointer transition">
                         <div className="w-9 h-9 rounded-full bg-[#e888d3] flex items-center justify-center flex-shrink-0"><span className="material-icons-outlined text-black text-sm">movie</span></div>
                         <div className="flex-1 min-w-0"><p className="font-medium text-sm truncate">{f.titulo}</p><p className="text-xs text-gray-500">{f.ano} • Filme</p></div>
@@ -1272,7 +1272,7 @@ export default function Home() {
                     <div className="px-4 py-2 text-[10px] text-gray-500 uppercase tracking-wider border-b border-[#303030] bg-[#161616] sticky top-0 flex items-center gap-2">
                       <span className="material-icons-outlined text-sm">video_library</span> Vídeos ({vds.length})
                     </div>
-                    {vds.map((v) => (
+                    {vds.map((v: any) => (
                       <div key={`video-${v.id}`} onClick={() => { setVideoAssistindo(v); setMostrarSugestoes(false); setBusca(""); setFilmeSelecionado(null); setCanalSelecionado(null); }} className="flex items-center gap-3 px-4 py-2 hover:bg-[#272727] cursor-pointer transition">
                         <div className="w-14 h-9 rounded overflow-hidden flex-shrink-0 bg-black"><img src={v.thumb} alt={v.titulo} className="w-full h-full object-cover" /></div>
                         <div className="flex-1 min-w-0"><p className="font-medium text-sm truncate">{v.titulo}</p><p className="text-xs text-gray-500 truncate">{v.canal}</p></div>
@@ -1285,7 +1285,7 @@ export default function Home() {
                     <div className="px-4 py-2 text-[10px] text-gray-500 uppercase tracking-wider border-b border-[#303030] bg-[#161616] sticky top-0 flex items-center gap-2">
                       <span className="material-icons-outlined text-sm">sentiment_very_satisfied</span> Memes ({mms.length})
                     </div>
-                    {mms.map((m) => (
+                    {mms.map((m: any) => (
                       <div key={`meme-${m.id}`} onClick={() => { setAbaAtiva("funny"); setMostrarSugestoes(false); setBusca(""); setVideoAssistindo(null); setFilmeSelecionado(null); setCanalSelecionado(null); }} className="flex items-center gap-3 px-4 py-2 hover:bg-[#272727] cursor-pointer transition">
                         <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-black"><img src={m.thumb} alt={m.titulo} className="w-full h-full object-cover" /></div>
                         <div className="flex-1 min-w-0"><p className="font-medium text-sm truncate">{m.titulo}</p><p className="text-xs text-gray-500 truncate">{m.autor}</p></div>
@@ -1298,7 +1298,7 @@ export default function Home() {
                     <div className="px-4 py-2 text-[10px] text-gray-500 uppercase tracking-wider border-b border-[#303030] bg-[#161616] sticky top-0 flex items-center gap-2">
                       <span className="material-icons-outlined text-sm">photo_library</span> Posts ({psts.length})
                     </div>
-                    {psts.map((p) => (
+                    {psts.map((p: any) => (
                       <div key={`post-${p.id}`} onClick={() => { setPostAberto(p); setMostrarSugestoes(false); setBusca(""); setVideoAssistindo(null); setFilmeSelecionado(null); setCanalSelecionado(null); }} className="flex items-center gap-3 px-4 py-2 hover:bg-[#272727] cursor-pointer transition">
                         <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-black"><img src={p.imagem} alt="post" className="w-full h-full object-cover" /></div>
                         <div className="flex-1 min-w-0"><p className="font-medium text-sm truncate">@{p.autor}</p><p className="text-xs text-gray-500 truncate">{p.legenda || "Sem legenda"}</p></div>
