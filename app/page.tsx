@@ -9,12 +9,14 @@ const videosFake = [
   { id: 3, titulo: "Bistecão fez cariani pagar almoço milionário", canal: "@podcast_brasil", views: "1,2 mi de visualizações • há 3 dias", thumb: "https://picsum.photos/seed/video3/640/360", duracao: "55:02", categoria: "Podcasts", cor: "bg-red-600", descricao: "Nesse episódio do podcast, o Bistecão fez o Cariani pagar um almoço que virou lenda!" },
 ];
 
-const shortsFake = [
-  { id: 1, titulo: "Olha essa jogada absurda!", canal: "@dj_nene", curtidas: "45 mil", comentarios: "1,2 mil", thumb: "https://picsum.photos/seed/short1/400/700", cor: "bg-blue-600" },
-  { id: 2, titulo: "Meu novo setup tá insano", canal: "@tech_br", curtidas: "23 mil", comentarios: "890", thumb: "https://picsum.photos/seed/short2/400/700", cor: "bg-purple-600" },
-  { id: 3, titulo: "Ele não esperava por isso", canal: "@comedia_br", curtidas: "120 mil", comentarios: "3,5 mil", thumb: "https://picsum.photos/seed/short3/400/700", cor: "bg-yellow-600" },
-  { id: 4, titulo: "Golpe novo no futebol", canal: "@esportes", curtidas: "67 mil", comentarios: "2,1 mil", thumb: "https://picsum.photos/seed/short4/400/700", cor: "bg-green-600" },
-  { id: 5, titulo: "Essa receita é TOP", canal: "@chef_br", curtidas: "89 mil", comentarios: "1,8 mil", thumb: "https://picsum.photos/seed/short5/400/700", cor: "bg-orange-600" },
+// ============ MEMES (FUNNY) ============
+const memesFake = [
+  { id: "meme_1", titulo: "Quando você finalmente termina o projeto", thumb: "https://picsum.photos/seed/meme1/600/600", autor: "@meme_lord", likes: 1243, dislikes: 47, comentarios: 89 },
+  { id: "meme_2", titulo: "Eu chegando na segunda-feira", thumb: "https://picsum.photos/seed/meme2/600/600", autor: "@humor_br", likes: 892, dislikes: 23, comentarios: 42 },
+  { id: "meme_3", titulo: "POV: você acordou atrasado", thumb: "https://picsum.photos/seed/meme3/600/600", autor: "@comedia", likes: 2431, dislikes: 98, comentarios: 156 },
+  { id: "meme_4", titulo: "Meu chefe pedindo hora extra", thumb: "https://picsum.photos/seed/meme4/600/600", autor: "@trabalho_sofr", likes: 573, dislikes: 12, comentarios: 28 },
+  { id: "meme_5", titulo: "Quando o wi-fi cai", thumb: "https://picsum.photos/seed/meme5/600/600", autor: "@tecnologia", likes: 1847, dislikes: 56, comentarios: 73 },
+  { id: "meme_6", titulo: "Segunda-feira às 6 da manhã", thumb: "https://picsum.photos/seed/meme6/600/600", autor: "@escola_sofr", likes: 3201, dislikes: 143, comentarios: 210 },
 ];
 
 // ============ FILMES (CATEGORIA) ============
@@ -31,7 +33,7 @@ const filmes = [
   { id: "tt0816692", titulo: "Interestelar", ano: 2014 },
 ];
 
-const categorias = ["Todas","Música","Videogames","Podcasts","Automotivo","Esportes","Tecnologia","Comédia","Filmes","Educação"];
+const categorias = ["Todas", "Filmes", "NSFW"];
 
 const planos = [
   { id: "free", nome: "Iniciante", preco: 0, precoOriginal: null, periodo: "para sempre", popular: false, limiteMB: 50, recursos: ["50 MB por vídeo","10 min de duração máxima","Vídeos em HD","Com anúncios"], botao: "Começar de graça" },
@@ -42,10 +44,6 @@ const planos = [
 
 const ordemPlanos = ["free", "essencial", "ultra", "master"];
 const coresCanais = ["bg-blue-600","bg-green-600","bg-red-600","bg-purple-600","bg-orange-600","bg-pink-600","bg-teal-600","bg-indigo-600"];
-
-// ============ FONTES DE FILMES ============
-
-
 
 function getCorCanal(canalNome: string) {
   const hash = canalNome.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
@@ -72,304 +70,6 @@ function formatarViews(n: number): string {
 
 function getTempoPublicado(viewsStr: string): string {
   return (viewsStr || "").split("•")[1]?.trim() || "";
-}
-
-function parsearMilhar(s: string): number {
-  if (!s) return 0;
-  const match = s.match(/([\d.,]+)\s*(mil|mi)?/i);
-  if (!match) return 0;
-  let n = parseFloat(match[1].replace(/\./g, "").replace(",", "."));
-  if (isNaN(n)) return 0;
-  const unit = match[2]?.toLowerCase();
-  if (unit === "mil") n *= 1000;
-  else if (unit === "mi") n *= 1000000;
-  return Math.round(n);
-}
-
-function formatarMilhar(n: number): string {
-  if (n < 1000) return `${n}`;
-  if (n < 1000000) return `${(n / 1000).toFixed(1).replace(".", ",")} mil`;
-  return `${(n / 1000000).toFixed(1).replace(".", ",")} mi`;
-}
-
-// ============ SHORTS ============
-function Shorts({ curtidas, onToggleCurtida, usuario, comentariosShorts, setComentariosShorts, onLoginNecessario, onCanalClick, inscricoes, onSeguir, onDeixarDeSeguir }: any) {
-  const [painelAberto, setPainelAberto] = useState<string | null>(null);
-  const [texto, setTexto] = useState("");
-  const [respondendoA, setRespondendoA] = useState<number | null>(null);
-  const [textoResposta, setTextoResposta] = useState("");
-
-  const abrirComentarios = (idShort: string) => {
-    if (!usuario) { onLoginNecessario(); return; }
-    setPainelAberto(idShort);
-    setTexto("");
-    setRespondendoA(null);
-    setTextoResposta("");
-  };
-
-  const adicionarComentario = (idShort: string) => {
-    if (!texto.trim() || !usuario) return;
-    const novo = {
-      id: Date.now(),
-      autor: `@${usuario}`,
-      texto: texto.trim(),
-      tempo: "agora",
-      respostas: [],
-    };
-    setComentariosShorts((prev: any) => ({
-      ...prev,
-      [idShort]: [novo, ...(prev[idShort] || [])],
-    }));
-    setTexto("");
-  };
-
-  const adicionarResposta = (idShort: string, comentarioId: number) => {
-    if (!textoResposta.trim() || !usuario) return;
-    const novaResposta = {
-      id: Date.now(),
-      autor: `@${usuario}`,
-      texto: textoResposta.trim(),
-      tempo: "agora",
-    };
-    setComentariosShorts((prev: any) => ({
-      ...prev,
-      [idShort]: (prev[idShort] || []).map((c: any) =>
-        c.id === comentarioId
-          ? { ...c, respostas: [...(c.respostas || []), novaResposta] }
-          : c
-      ),
-    }));
-    setTextoResposta("");
-    setRespondendoA(null);
-  };
-
-  const contarComentariosDoShort = (idShort: string) => {
-    const comentarios = comentariosShorts[idShort] || [];
-    return comentarios.reduce(
-      (acc: number, c: any) => acc + 1 + (c.respostas?.length || 0),
-      0
-    );
-  };
-
-  return (
-    <>
-      {shortsFake.map((s) => {
-        const idShort = `short_${s.id}`;
-        const listaCurtidas = curtidas[idShort] || [];
-        const curtido = usuario ? listaCurtidas.includes(usuario) : false;
-        const baseFixa = parsearMilhar(s.curtidas);
-        const totalCurtidas = baseFixa + listaCurtidas.length;
-
-        const comentariosBase = parsearMilhar(s.comentarios);
-        const comentariosUsuario = contarComentariosDoShort(idShort);
-        const totalComentarios = comentariosBase + comentariosUsuario;
-
-        const listaComentarios = comentariosShorts[idShort] || [];
-
-        return (
-          <div key={s.id} className="h-full w-full snap-start flex items-center justify-center relative">
-            <div className="relative h-[calc(100vh-3.5rem)] aspect-[9/16] max-h-full">
-              <img src={s.thumb} alt={s.titulo} className="w-full h-full object-cover rounded-lg" />
-              <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent rounded-b-lg"></div>
-
-              <div className="absolute right-3 bottom-24 flex flex-col gap-5 items-center">
-                <button
-                  onClick={() => onToggleCurtida(idShort)}
-                  className="flex flex-col items-center cursor-pointer group"
-                  title={curtido ? "Descurtir" : "Curtir"}
-                >
-                  <div className={`rounded-full p-2.5 transition ${curtido ? "bg-[#e888d3]" : "bg-black/50 group-hover:bg-[#272727]"}`}>
-                    <span className={`material-icons-outlined ${curtido ? "text-black" : "text-white"}`}>
-                      {curtido ? "thumb_up" : "thumb_up_off_alt"}
-                    </span>
-                  </div>
-                  <span className={`text-xs mt-1 font-medium ${curtido ? "text-[#e888d3]" : "text-white"}`}>
-                    {formatarMilhar(totalCurtidas)}
-                  </span>
-                </button>
-
-                <button
-                  onClick={() => abrirComentarios(idShort)}
-                  className="flex flex-col items-center cursor-pointer group"
-                  title="Comentários"
-                >
-                  <div className="bg-black/50 rounded-full p-2.5 group-hover:bg-[#272727] transition">
-                    <span className="material-icons-outlined text-white">comment</span>
-                  </div>
-                  <span className="text-white text-xs mt-1 font-medium">
-                    {formatarMilhar(totalComentarios)}
-                  </span>
-                </button>
-              </div>
-
-              <div className="absolute left-4 bottom-6 right-20">
-                <div className="flex items-center gap-3 mb-2">
-                  <div onClick={() => onCanalClick(s.canal)} className={`w-9 h-9 ${s.cor} rounded-full cursor-pointer hover:ring-2 hover:ring-[#e888d3] transition`}></div>
-                  <span onClick={() => onCanalClick(s.canal)} className="font-medium text-sm cursor-pointer hover:text-[#e888d3] transition">{s.canal}</span>
-                  {(() => {
-                    const seguindo = inscricoes.includes(s.canal);
-                    return (
-                      <button
-                        onClick={() => {
-                          if (seguindo) onDeixarDeSeguir(s.canal);
-                          else onSeguir(s.canal);
-                        }}
-                        className={`text-xs font-medium px-3 py-1 rounded-full transition cursor-pointer ${
-                          seguindo
-                            ? "bg-[#272727] text-white border border-[#303030] hover:bg-[#3f3f3f]"
-                            : "bg-white text-black hover:bg-gray-200"
-                        }`}
-                      >
-                        {seguindo ? "Seguindo" : "Seguir"}
-                      </button>
-                    );
-                  })()}
-                </div>
-                <p className="text-sm text-white leading-5">{s.titulo}</p>
-              </div>
-
-              {painelAberto === idShort && (
-                <>
-                  <div
-                    className="absolute inset-0 bg-black/60 rounded-lg cursor-pointer"
-                    onClick={() => setPainelAberto(null)}
-                  />
-                  <div className="absolute left-0 right-0 bottom-0 max-h-[70%] bg-[#1c1c1c] rounded-t-2xl flex flex-col overflow-hidden z-10">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-[#303030]">
-                      <div className="flex items-center gap-2">
-                        <span className="material-icons-outlined text-[#e888d3]">comment</span>
-                        <h3 className="font-bold text-sm">
-                          {formatarMilhar(totalComentarios)} comentários
-                        </h3>
-                      </div>
-                      <button
-                        onClick={() => setPainelAberto(null)}
-                        className="material-icons-outlined text-gray-400 hover:text-white cursor-pointer"
-                      >close</button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                      {listaComentarios.length === 0 ? (
-                        <div className="text-center py-8">
-                          <span className="material-icons-outlined text-4xl text-gray-600 mb-2">forum</span>
-                          <p className="text-sm text-gray-400">Nenhum comentário ainda</p>
-                          <p className="text-xs text-gray-500 mt-1">Seja o primeiro a comentar!</p>
-                        </div>
-                      ) : (
-                        listaComentarios.map((c: any) => (
-                          <div key={c.id} className="flex flex-col">
-                            <div className="flex gap-3">
-                              <div className="w-8 h-8 bg-[#e888d3] rounded-full flex items-center justify-center flex-shrink-0">
-                                <span className="material-icons-outlined text-black text-sm">person</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-medium text-xs">{c.autor}</span>
-                                  <span className="text-gray-500 text-[10px]">{c.tempo}</span>
-                                </div>
-                                <p className="text-sm text-gray-200 break-words">{c.texto}</p>
-
-                                <button
-                                  onClick={() => {
-                                    if (respondendoA === c.id) {
-                                      setRespondendoA(null);
-                                      setTextoResposta("");
-                                    } else {
-                                      setRespondendoA(c.id);
-                                      setTextoResposta("");
-                                    }
-                                  }}
-                                  className="text-xs text-gray-400 hover:text-[#e888d3] mt-2 font-medium transition cursor-pointer"
-                                >
-                                  Responder
-                                </button>
-
-                                {respondendoA === c.id && (
-                                  <div className="flex items-center gap-2 mt-2">
-                                    <input
-                                      type="text"
-                                      placeholder={`Responder ${c.autor}...`}
-                                      value={textoResposta}
-                                      onChange={(e) => setTextoResposta(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter" && !e.shiftKey) {
-                                          e.preventDefault();
-                                          adicionarResposta(idShort, c.id);
-                                        }
-                                        if (e.key === "Escape") {
-                                          setRespondendoA(null);
-                                          setTextoResposta("");
-                                        }
-                                      }}
-                                      autoFocus
-                                      className="flex-1 bg-[#0f0f0f] border border-[#303030] rounded-full px-3 py-1.5 text-xs text-white outline-none focus:border-[#e888d3]"
-                                    />
-                                    <button
-                                      onClick={() => adicionarResposta(idShort, c.id)}
-                                      disabled={!textoResposta.trim()}
-                                      className="w-8 h-8 rounded-full bg-[#e888d3] hover:bg-[#d176be] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition cursor-pointer"
-                                    >
-                                      <span className="material-icons-outlined text-black text-sm">send</span>
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {(c.respostas?.length || 0) > 0 && (
-                              <div className="ml-11 mt-3 space-y-3 border-l-2 border-[#303030] pl-3">
-                                {c.respostas.map((r: any) => (
-                                  <div key={r.id} className="flex gap-2">
-                                    <div className="w-7 h-7 bg-[#e888d3]/60 rounded-full flex items-center justify-center flex-shrink-0">
-                                      <span className="material-icons-outlined text-black text-xs">person</span>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 mb-0.5">
-                                        <span className="font-medium text-xs">{r.autor}</span>
-                                        <span className="text-gray-500 text-[10px]">{r.tempo}</span>
-                                      </div>
-                                      <p className="text-sm text-gray-300 break-words">{r.texto}</p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 p-3 border-t border-[#303030]">
-                      <input
-                        type="text"
-                        placeholder="Adicione um comentário..."
-                        value={texto}
-                        onChange={(e) => setTexto(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            adicionarComentario(idShort);
-                          }
-                        }}
-                        className="flex-1 bg-[#0f0f0f] border border-[#303030] rounded-full px-4 py-2 text-sm text-white outline-none focus:border-[#e888d3]"
-                      />
-                      <button
-                        onClick={() => adicionarComentario(idShort)}
-                        disabled={!texto.trim()}
-                        className="w-10 h-10 rounded-full bg-[#e888d3] hover:bg-[#d176be] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition cursor-pointer"
-                      >
-                        <span className="material-icons-outlined text-black text-lg">send</span>
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </>
-  );
 }
 
 // ============ ASSISTIR VÍDEO ============
@@ -550,7 +250,6 @@ export default function Home() {
   const [mostrarLogin, setMostrarLogin] = useState(false);
   const [modoAuth, setModoAuth] = useState<"login" | "cadastro">("login");
   const [mostrarUpload, setMostrarUpload] = useState(false);
-  const [mostrarCategorias, setMostrarCategorias] = useState(false);
   const [mostrarSeguindo, setMostrarSeguindo] = useState(false);
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
   const [mostrarMensagens, setMostrarMensagens] = useState(false);
@@ -563,11 +262,9 @@ export default function Home() {
   const [emailInput, setEmailInput] = useState("");
   const [planoAtual, setPlanoAtual] = useState("free");
   const [carregou, setCarregou] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState("inicio");
+  const [abaAtiva, setAbaAtiva] = useState("social");
   const [videoAssistindo, setVideoAssistindo] = useState<any | null>(null);
   const [filmeSelecionado, setFilmeSelecionado] = useState<any | null>(null);
-  const [fonteFilme, setFonteFilme] = useState(0);
-const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado");
   const [canalSelecionado, setCanalSelecionado] = useState<string | null>(null);
   const [usuarios, setUsuarios] = useState<{ [key: string]: any }>({});
   const [meusVideos, setMeusVideos] = useState<any[]>([]);
@@ -575,7 +272,6 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
   const [seguindoVistos, setSeguindoVistos] = useState<string[]>([]);
   const [curtidas, setCurtidas] = useState<{ [videoId: string]: string[] }>({});
   const [views, setViews] = useState<{ [videoId: string]: number }>({});
-  const [comentariosShorts, setComentariosShorts] = useState<{ [shortId: string]: any[] }>({});
   const [notificacoes, setNotificacoes] = useState<{ [userId: string]: any[] }>({});
   const [mostrarNotificacoes, setMostrarNotificacoes] = useState(false);
   const [abaCanal, setAbaCanal] = useState<"videos" | "editar">("videos");
@@ -588,12 +284,34 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
   const [tituloModal, setTituloModal] = useState("");
   const [descModal, setDescModal] = useState("");
   const [urlModal, setUrlModal] = useState("");
-  const [catModal, setCatModal] = useState("Videogames");
+  const [catModal, setCatModal] = useState("Filmes");
   const [mostrarPagamento, setMostrarPagamento] = useState(false);
   const [metodoPagamento, setMetodoPagamento] = useState<"pix" | "cartao">("pix");
   const [processandoPagamento, setProcessandoPagamento] = useState(false);
   const [planoSelecionado, setPlanoSelecionado] = useState<any>(null);
   const [etapaPagamento, setEtapaPagamento] = useState<"planos" | "pagamento">("planos");
+
+  const [filmesUsuarios, setFilmesUsuarios] = useState<any[]>([]);
+  const [mostrarUploadFilme, setMostrarUploadFilme] = useState(false);
+  const [tituloFilmeInput, setTituloFilmeInput] = useState("");
+  const [anoFilmeInput, setAnoFilmeInput] = useState("");
+  const [imdbFilmeInput, setImdbFilmeInput] = useState("");
+
+  const [memesUsuarios, setMemesUsuarios] = useState<any[]>([]);
+  const [mostrarUploadMeme, setMostrarUploadMeme] = useState(false);
+  const [tituloMemeInput, setTituloMemeInput] = useState("");
+  const [imgMemeInput, setImgMemeInput] = useState("");
+  const [arquivoMeme, setArquivoMeme] = useState<File | null>(null);
+  const [memeCurtidas, setMemeCurtidas] = useState<{ [id: string]: string[] }>({});
+  const [memeDislikes, setMemeDislikes] = useState<{ [id: string]: string[] }>({});
+
+  const [mostrarConfirmacaoNSFW, setMostrarConfirmacaoNSFW] = useState(false);
+  const [modoClaro, setModoClaro] = useState(false);
+  const [posters, setPosters] = useState<{ [id: string]: string }>({});
+  const [recados, setRecados] = useState<{ [usuario: string]: any[] }>({});
+  const [textoRecado, setTextoRecado] = useState("");
+  const [mostrarEmojisRecado, setMostrarEmojisRecado] = useState(false);
+  const [imagemRecado, setImagemRecado] = useState("");
 
   const mainRef = useRef<HTMLElement>(null);
   const ultimoCountRef = useRef(0);
@@ -617,9 +335,6 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
     const curtidasSalvas = localStorage.getItem("nosafee_curtidas");
     if (curtidasSalvas) setCurtidas(JSON.parse(curtidasSalvas));
 
-    const comentariosShortsSalvos = localStorage.getItem("nosafee_comentarios_shorts");
-    if (comentariosShortsSalvos) setComentariosShorts(JSON.parse(comentariosShortsSalvos));
-
     const viewsSalvas = localStorage.getItem("nosafee_views");
     if (viewsSalvas) {
       setViews(JSON.parse(viewsSalvas));
@@ -633,6 +348,20 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
 
     const notifSalvas = localStorage.getItem("nosafee_notificacoes");
     if (notifSalvas) setNotificacoes(JSON.parse(notifSalvas));
+
+    const filmesSalvos = localStorage.getItem("nosafee_filmes");
+    if (filmesSalvos) setFilmesUsuarios(JSON.parse(filmesSalvos));
+
+    const memesSalvos = localStorage.getItem("nosafee_memes");
+    if (memesSalvos) setMemesUsuarios(JSON.parse(memesSalvos));
+    const memeCurtidasSalvas = localStorage.getItem("nosafee_meme_curtidas");
+    if (memeCurtidasSalvas) setMemeCurtidas(JSON.parse(memeCurtidasSalvas));
+    const memeDislikesSalvos = localStorage.getItem("nosafee_meme_dislikes");
+    if (memeDislikesSalvos) setMemeDislikes(JSON.parse(memeDislikesSalvos));
+    const recadosSalvos = localStorage.getItem("nosafee_recados");
+    if (recadosSalvos) setRecados(JSON.parse(recadosSalvos));
+    if (localStorage.getItem("nosafee_modo_claro") === "true") setModoClaro(true);
+
     setCarregou(true);
     setCarregouIdade(true);
   }, []);
@@ -649,8 +378,34 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
   useEffect(() => { if (carregou) localStorage.setItem("nosafee_mensagens", JSON.stringify(todasMensagens)); }, [todasMensagens, carregou]);
   useEffect(() => { if (carregou) localStorage.setItem("nosafee_curtidas", JSON.stringify(curtidas)); }, [curtidas, carregou]);
   useEffect(() => { if (carregou) localStorage.setItem("nosafee_views", JSON.stringify(views)); }, [views, carregou]);
-  useEffect(() => { if (carregou) localStorage.setItem("nosafee_comentarios_shorts", JSON.stringify(comentariosShorts)); }, [comentariosShorts, carregou]);
   useEffect(() => { if (carregou) localStorage.setItem("nosafee_notificacoes", JSON.stringify(notificacoes)); }, [notificacoes, carregou]);
+  useEffect(() => { if (carregou) localStorage.setItem("nosafee_filmes", JSON.stringify(filmesUsuarios)); }, [filmesUsuarios, carregou]);
+  useEffect(() => { if (carregou) localStorage.setItem("nosafee_memes", JSON.stringify(memesUsuarios)); }, [memesUsuarios, carregou]);
+  useEffect(() => { if (carregou) localStorage.setItem("nosafee_meme_curtidas", JSON.stringify(memeCurtidas)); }, [memeCurtidas, carregou]);
+  useEffect(() => { if (carregou) localStorage.setItem("nosafee_meme_dislikes", JSON.stringify(memeDislikes)); }, [memeDislikes, carregou]);
+  useEffect(() => { if (carregou) localStorage.setItem("nosafee_recados", JSON.stringify(recados)); }, [recados, carregou]);
+  useEffect(() => { if (carregou) localStorage.setItem("nosafee_modo_claro", JSON.stringify(modoClaro)); }, [modoClaro, carregou]);
+
+  // Busca pôsteres do TMDB
+  const TMDB_API_KEY = "0f29ff5593e87401941af3352859cfbd";
+  useEffect(() => {
+    const filmesParaBuscar = [...filmesUsuarios, ...filmes];
+    filmesParaBuscar.forEach(async (filme) => {
+      if (posters[filme.id]) return;
+      if (!filme.id.startsWith("tt")) return;
+      try {
+        const res = await fetch(`https://api.themoviedb.org/3/find/${filme.id}?api_key=${TMDB_API_KEY}&external_source=imdb_id&language=pt-BR`);
+        const data = await res.json();
+        const resultado = data.movie_results?.[0];
+        if (resultado?.poster_path) {
+          const url = `https://image.tmdb.org/t/p/w500${resultado.poster_path}`;
+          setPosters((prev) => ({ ...prev, [filme.id]: url }));
+        }
+      } catch (e) {
+        console.error("Erro ao buscar pôster:", filme.id, e);
+      }
+    });
+  }, [filmesUsuarios]);
 
   useEffect(() => {
     if (!carregou || !usuario) return;
@@ -669,8 +424,12 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
       if (e.key === "nosafee_usuarios" && e.newValue) setUsuarios(JSON.parse(e.newValue));
       if (e.key === "nosafee_curtidas" && e.newValue) setCurtidas(JSON.parse(e.newValue));
       if (e.key === "nosafee_views" && e.newValue) setViews(JSON.parse(e.newValue));
-      if (e.key === "nosafee_comentarios_shorts" && e.newValue) setComentariosShorts(JSON.parse(e.newValue));
       if (e.key === "nosafee_notificacoes" && e.newValue) setNotificacoes(JSON.parse(e.newValue));
+      if (e.key === "nosafee_filmes" && e.newValue) setFilmesUsuarios(JSON.parse(e.newValue));
+      if (e.key === "nosafee_memes" && e.newValue) setMemesUsuarios(JSON.parse(e.newValue));
+      if (e.key === "nosafee_meme_curtidas" && e.newValue) setMemeCurtidas(JSON.parse(e.newValue));
+      if (e.key === "nosafee_meme_dislikes" && e.newValue) setMemeDislikes(JSON.parse(e.newValue));
+      if (e.key === "nosafee_recados" && e.newValue) setRecados(JSON.parse(e.newValue));
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
@@ -950,13 +709,9 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
     localStorage.removeItem("nosafee_logado");
   };
 
+  const todosOsFilmes = [...filmesUsuarios, ...filmes];
+  const todosOsMemes = [...memesUsuarios, ...memesFake];
   const todosVideosLista = todosOsVideosDoSite();
-  const buscaSemArroba = busca.replace("@", "").toLowerCase();
-  const videosFiltrados = todosVideosLista.filter((v) => {
-    const passaBusca = v.titulo.toLowerCase().includes(buscaSemArroba);
-    const passaCategoria = categoriaAtiva === "Todas" || v.categoria === categoriaAtiva;
-    return passaBusca && passaCategoria;
-  });
   const naoVistosSeguindo = inscricoes.filter((c) => !seguindoVistos.includes(c)).length;
   const viewsDoVideo = (v: any) => {
     const count = views[v.id] || 0;
@@ -995,11 +750,14 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div
+      className={`flex flex-col h-screen overflow-hidden ${modoClaro ? "modo-claro" : ""}`}
+      style={{ backgroundColor: modoClaro ? "#f0f2f5" : "#0f0f0f" }}
+    >
       {/* ============ CABEÇALHO ============ */}
       <header className="flex items-center justify-between px-4 h-16 bg-[#121212] border-b border-[#e888d3] fixed top-0 w-full z-50">
         <div onClick={irParaInicio} className="flex items-center cursor-pointer">
-          <img src="/logo.png" alt="nosafee" className="h-20 object-contain" />
+          <img src={modoClaro ? "/logo-claro.png" : "/logo.png"} alt="nosafee" className="h-20 object-contain" />
         </div>
 
         <div className="hidden md:flex items-center flex-1 max-w-2xl mx-4 relative">
@@ -1068,6 +826,16 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setModoClaro(!modoClaro)}
+            className="relative p-2 hover:bg-[#272727] rounded-full transition cursor-pointer"
+            title={modoClaro ? "Modo escuro" : "Modo claro"}
+          >
+            <span className="material-icons-outlined text-gray-300">
+              {modoClaro ? "dark_mode" : "light_mode"}
+            </span>
+          </button>
+
           {logado && (
             <div className="relative">
               <button
@@ -1136,14 +904,6 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
               )}
             </div>
           )}
-
-          <button
-            onClick={() => setMostrarUpload(true)}
-            className="flex items-center gap-2 bg-[#222222] hover:bg-[#e888d3] hover:text-black px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 cursor-pointer"
-          >
-            <span className="material-icons-outlined text-xl">file_upload</span>
-            Enviar vídeo
-          </button>
         </div>
       </header>
 
@@ -1152,47 +912,29 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
         <aside className="w-60 bg-[#0f0f0f] overflow-y-auto hidden md:block px-3 py-2">
           <ul className="space-y-1">
             <li
+              onClick={() => { setAbaAtiva("social"); setVideoAssistindo(null); setCanalSelecionado(null); setFilmeSelecionado(null); }}
+              className={`flex items-center gap-4 px-3 py-2 rounded-lg cursor-pointer ${abaAtiva === "social" ? "bg-[#e888d3] text-black" : "hover:bg-[#272727]"}`}
+            >
+              <span className="material-icons-outlined">people</span> Social
+            </li>
+            <li
+              onClick={() => { setAbaAtiva("funny"); setVideoAssistindo(null); setCanalSelecionado(null); setFilmeSelecionado(null); }}
+              className={`flex items-center gap-4 px-3 py-2 rounded-lg cursor-pointer ${abaAtiva === "funny" ? "bg-[#e888d3] text-black" : "hover:bg-[#272727]"}`}
+            >
+              <span className="material-icons-outlined">sentiment_very_satisfied</span> Funny
+            </li>
+            <li
               onClick={irParaInicio}
               className={`flex items-center gap-4 px-3 py-2 rounded-lg cursor-pointer font-medium ${abaAtiva === "inicio" && !videoAssistindo && !canalSelecionado && !filmeSelecionado ? "bg-[#e888d3] text-black" : "hover:bg-[#272727]"}`}
             >
-              <span className="material-icons-outlined">home</span> Início
+              <span className="material-icons-outlined">movie</span> Filmes
             </li>
             <li
-              onClick={() => { setAbaAtiva("shorts"); setVideoAssistindo(null); setCanalSelecionado(null); setFilmeSelecionado(null); }}
-              className={`flex items-center gap-4 px-3 py-2 rounded-lg cursor-pointer ${abaAtiva === "shorts" ? "bg-[#e888d3] text-black" : "hover:bg-[#272727]"}`}
+              onClick={() => setMostrarConfirmacaoNSFW(true)}
+              className={`flex items-center gap-4 px-3 py-2 rounded-lg cursor-pointer ${abaAtiva === "nsfw" ? "bg-[#e888d3] text-black" : "hover:bg-[#272727]"}`}
             >
-              <span className="material-icons-outlined">video_library</span> Shorts
+              <span className="material-icons-outlined">local_fire_department</span> NSFW
             </li>
-            <li onClick={() => setMostrarCategorias(!mostrarCategorias)} className="flex items-center gap-4 px-3 py-2 hover:bg-[#272727] rounded-lg cursor-pointer">
-              <span className="material-icons-outlined">category</span> Categorias
-              <span className="material-icons-outlined text-sm ml-auto">{mostrarCategorias ? "expand_less" : "expand_more"}</span>
-            </li>
-            {mostrarCategorias && (
-              <li className="mt-1">
-                <div className="bg-[#1c1c1c] border border-[#2a2a2a] rounded-xl p-2 space-y-0.5">
-                  {categorias.map((cat) => (
-                    <div
-                      key={cat}
-                      onClick={() => {
-                        setCategoriaAtiva(cat);
-                        setVideoAssistindo(null);
-                        setCanalSelecionado(null);
-                        setFilmeSelecionado(null);
-                        if (cat === "Filmes") {
-                          setAbaAtiva("filmes");
-                        } else {
-                          setAbaAtiva("inicio");
-                        }
-                      }}
-                      className={`px-3 py-2 rounded-lg cursor-pointer text-sm transition-all flex items-center justify-between ${categoriaAtiva === cat ? "bg-[#e888d3] text-black font-semibold" : "hover:bg-[#272727] text-gray-300"}`}
-                    >
-                      <span>{cat}</span>
-                      {categoriaAtiva === cat && <span className="material-icons-outlined text-base">check</span>}
-                    </div>
-                  ))}
-                </div>
-              </li>
-            )}
           </ul>
 
           <hr className="border-[#303030] my-3" />
@@ -1296,7 +1038,7 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
 
         <main
           ref={mainRef}
-          className={`flex-1 bg-[#0f0f0f] ${abaAtiva === "shorts" && !videoAssistindo && !canalSelecionado && !filmeSelecionado ? "overflow-y-scroll snap-y snap-mandatory scrollbar-hide" : "overflow-y-auto"}`}
+          className="flex-1 bg-[#0f0f0f] overflow-y-auto"
         >
           {/* ===== FILME SELECIONADO ===== */}
           {filmeSelecionado ? (
@@ -1312,7 +1054,7 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
                 <p className="text-sm text-gray-400">{filmeSelecionado.titulo} ({filmeSelecionado.ano})</p>
               </div>
 
-                           <div className="flex-1 relative">
+              <div className="flex-1 relative">
                 <iframe
                   key={filmeSelecionado.id}
                   src={`https://embedplayapi.top/embed/${filmeSelecionado.id}`}
@@ -1322,8 +1064,7 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
                   referrerPolicy="no-referrer-when-downgrade"
                 ></iframe>
               </div>
-              </div>
-    
+            </div>
           ) : videoAssistindo ? (
             <AssistirVideo
               video={videoAssistindo}
@@ -1373,12 +1114,20 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
                         <h1 className="text-3xl font-bold mb-1">{canalSelecionado}</h1>
                         <p className="text-gray-400 text-sm mb-3">{seguidores.toLocaleString("pt-BR")} seguidores • {videos.length} {videos.length === 1 ? "vídeo" : "vídeos"}</p>
                         {ehMeuPerfil ? (
-                          <button
-                            onClick={() => { setCanalSelecionado(null); setAbaAtiva("canal"); setAbaCanal("videos"); }}
-                            className="px-6 py-2.5 rounded-full text-sm font-medium transition-all bg-[#e888d3] hover:bg-[#d176be] text-black flex items-center gap-2 cursor-pointer"
-                          >
-                            <span className="material-icons-outlined text-base">settings</span> Gerenciar meus vídeos
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => { setCanalSelecionado(null); setAbaAtiva("canal"); setAbaCanal("videos"); }}
+                              className="px-6 py-2.5 rounded-full text-sm font-medium transition-all bg-[#e888d3] hover:bg-[#d176be] text-black flex items-center gap-2 cursor-pointer"
+                            >
+                              <span className="material-icons-outlined text-base">video_library</span> Gerenciar meus vídeos
+                            </button>
+                            <button
+                              onClick={() => { setCanalSelecionado(null); setAbaAtiva("canal"); setAbaCanal("editar"); }}
+                              className="px-6 py-2.5 rounded-full text-sm font-medium transition-all bg-[#272727] hover:bg-[#3f3f3f] text-white border border-[#303030] flex items-center gap-2 cursor-pointer"
+                            >
+                              <span className="material-icons-outlined text-base">manage_accounts</span> Editar perfil
+                            </button>
+                          </div>
                         ) : (
                           <button
                             onClick={() => { if (seguindo) deixarDeSeguirCanal(canalSelecionado); else seguirCanal(canalSelecionado); }}
@@ -1427,44 +1176,350 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
                 );
               })()}
             </div>
-          ) : abaAtiva === "shorts" ? (
-            <Shorts
-              curtidas={curtidas}
-              onToggleCurtida={toggleCurtida}
-              usuario={usuario}
-              comentariosShorts={comentariosShorts}
-              setComentariosShorts={setComentariosShorts}
-              onLoginNecessario={() => { setModoAuth("login"); setMostrarLogin(true); }}
-              onCanalClick={(canal: string) => {
-                setAbaAtiva("canal-externo");
-                setCanalSelecionado(canal);
-                setVideoAssistindo(null);
-                setFilmeSelecionado(null);
-              }}
-              inscricoes={inscricoes}
-              onSeguir={seguirCanal}
-              onDeixarDeSeguir={deixarDeSeguirCanal}
-            />
-          ) : abaAtiva === "filmes" ? (
-            <div className="p-6">
-              <h1 className="text-2xl font-bold mb-1">Filmes</h1>
-              <p className="text-gray-400 text-sm mb-6">{filmes.length} filmes disponíveis • dublado e legendado</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                {filmes.map((filme) => (
-                  <div
-                    key={filme.id}
-                    onClick={() => { setFilmeSelecionado(filme); setFonteFilme(0); setIdiomaFilme("dublado"); }}
-                    className="cursor-pointer group"
-                  >
-                    <div className="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-gradient-to-br from-[#1c1c1c] to-[#0f0f0f] flex flex-col items-center justify-center p-3 border border-[#303030] group-hover:border-[#e888d3] transition">
-                      <span className="material-icons-outlined text-5xl text-[#e888d3]/60 group-hover:text-[#e888d3] transition mb-2">movie</span>
-                      <p className="text-center text-xs text-gray-300 line-clamp-3 leading-tight">{filme.titulo}</p>
-                    </div>
-                    <h3 className="font-semibold text-sm mt-3 line-clamp-2 leading-5 group-hover:text-[#e888d3] transition">{filme.titulo}</h3>
-                    <p className="text-gray-400 text-xs">{filme.ano}</p>
-                  </div>
-                ))}
+          ) : abaAtiva === "nsfw" ? (
+            <div className="p-6 max-w-4xl mx-auto text-center">
+              <div className="mt-20">
+                <span className="material-icons-outlined text-6xl text-gray-700 mb-4">local_fire_department</span>
+                <h1 className="text-2xl font-bold mb-2">Conteúdo NSFW</h1>
+                <p className="text-gray-400">Em breve os vídeos adultos vão aparecer aqui.</p>
               </div>
+            </div>
+          ) : abaAtiva === "funny" ? (
+            <div className="p-4 max-w-2xl mx-auto">
+              <div className="flex items-center justify-between flex-wrap gap-3 mt-2 mb-6">
+                <div>
+                  <h1 className="text-2xl font-bold mb-1">Funny</h1>
+                  <p className="text-gray-400 text-sm">Só memes • {todosOsMemes.length} no total</p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
+                    setMostrarUploadMeme(true);
+                  }}
+                  className="flex items-center gap-2 bg-[#e888d3] hover:bg-[#d176be] text-black px-5 py-2.5 rounded-full text-sm font-bold transition-all cursor-pointer"
+                >
+                  <span className="material-icons-outlined text-base">add</span>
+                  Postar meme
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {todosOsMemes.map((meme) => {
+                  const listaCurtidas = memeCurtidas[meme.id] || [];
+                  const listaDislikes = memeDislikes[meme.id] || [];
+                  const curtiu = usuario ? listaCurtidas.includes(usuario) : false;
+                  const dislikei = usuario ? listaDislikes.includes(usuario) : false;
+                  const totalLikes = (meme.likes || 0) + listaCurtidas.length;
+                  const totalDislikes = (meme.dislikes || 0) + listaDislikes.length;
+
+                  const toggleMemeCurtida = () => {
+                    if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
+                    setMemeCurtidas((prev) => {
+                      const atuais = prev[meme.id] || [];
+                      if (atuais.includes(usuario)) return { ...prev, [meme.id]: atuais.filter((u) => u !== usuario) };
+                      return { ...prev, [meme.id]: [...atuais, usuario] };
+                    });
+                    if (!curtiu) {
+                      setMemeDislikes((prev) => ({ ...prev, [meme.id]: (prev[meme.id] || []).filter((u) => u !== usuario) }));
+                    }
+                  };
+
+                  const toggleMemeDislike = () => {
+                    if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
+                    setMemeDislikes((prev) => {
+                      const atuais = prev[meme.id] || [];
+                      if (atuais.includes(usuario)) return { ...prev, [meme.id]: atuais.filter((u) => u !== usuario) };
+                      return { ...prev, [meme.id]: [...atuais, usuario] };
+                    });
+                    if (!dislikei) {
+                      setMemeCurtidas((prev) => ({ ...prev, [meme.id]: (prev[meme.id] || []).filter((u) => u !== usuario) }));
+                    }
+                  };
+
+                  return (
+                    <div key={meme.id} className="bg-[#1c1c1c] rounded-2xl overflow-hidden border border-[#303030]">
+                      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#303030]">
+                        <div className="w-10 h-10 bg-[#e888d3] rounded-full flex items-center justify-center">
+                          <span className="material-icons-outlined text-black text-lg">person</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{meme.autor}</p>
+                          <p className="text-xs text-gray-500">há 2 horas</p>
+                        </div>
+                        <span className="material-icons-outlined text-gray-500 cursor-pointer hover:text-white">more_vert</span>
+                      </div>
+
+                      <div className="bg-black">
+                        <img src={meme.thumb} alt={meme.titulo} className="w-full object-contain max-h-[600px]" />
+                      </div>
+
+                      <div className="px-4 py-3">
+                        <p className="text-sm text-gray-200 mb-4">{meme.titulo}</p>
+                        <div className="flex items-center gap-4">
+                          <button onClick={toggleMemeCurtida} className={`flex items-center gap-2 transition cursor-pointer ${curtiu ? "text-[#e888d3]" : "text-gray-400 hover:text-white"}`}>
+                            <span className="material-icons-outlined text-2xl">{curtiu ? "favorite" : "favorite_border"}</span>
+                            <span className="text-sm font-medium">{totalLikes.toLocaleString("pt-BR")}</span>
+                          </button>
+                          <button onClick={toggleMemeDislike} className={`flex items-center gap-2 transition cursor-pointer ${dislikei ? "text-red-500" : "text-gray-400 hover:text-white"}`}>
+                            <span className="material-icons-outlined text-2xl">thumb_down</span>
+                            <span className="text-sm font-medium">{totalDislikes}</span>
+                          </button>
+                          <button className="flex items-center gap-2 text-gray-400 hover:text-white transition cursor-pointer">
+                            <span className="material-icons-outlined text-2xl">chat_bubble_outline</span>
+                            <span className="text-sm font-medium">{meme.comentarios || 0}</span>
+                          </button>
+                          <button className="flex items-center gap-2 text-gray-400 hover:text-white transition ml-auto cursor-pointer">
+                            <span className="material-icons-outlined text-2xl">share</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : abaAtiva === "social" ? (
+            <div className="p-4 max-w-5xl mx-auto">
+              {/* ===== HEADER ===== */}
+              <div className="mt-2 mb-6">
+                <h1 className="text-2xl font-bold mb-1">Social</h1>
+                <p className="text-gray-400 text-sm">
+                  Mural de recados • {usuario ? (recados[usuario]?.length || 0) : 0} no seu mural
+                </p>
+              </div>
+
+              {/* ===== MURAL DE RECADOS ===== */}
+              <div className="bg-[#1c1c1c] border border-[#303030] rounded-2xl mb-6 overflow-hidden">
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-[#303030]">
+                  <span className="material-icons-outlined text-[#e888d3]">sticky_note_2</span>
+                  <h2 className="font-bold">Recados</h2>
+                  <span className="text-xs text-gray-500 ml-auto">
+                    {usuario ? (recados[usuario]?.length || 0) : 0} no mural
+                  </span>
+                </div>
+
+                <div className="p-5">
+                  {logado ? (
+                    <>
+                      <div className="flex gap-3 mb-3">
+                        {usuarios[usuario]?.avatarUrl ? (
+                          <img src={usuarios[usuario].avatarUrl} alt={usuario} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 bg-[#e888d3] rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="material-icons-outlined text-black text-sm">person</span>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <textarea
+                            placeholder="Escreva um recado no seu mural..."
+                            value={textoRecado}
+                            onChange={(e) => setTextoRecado(e.target.value)}
+                            rows={2}
+                            className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 text-sm text-white outline-none focus:border-[#e888d3] resize-none"
+                          />
+
+                          {imagemRecado && (
+                            <div className="mt-2 relative inline-block">
+                              <img src={imagemRecado} alt="preview" className="max-h-40 rounded-lg border border-[#303030]" />
+                              <button
+                                onClick={() => setImagemRecado("")}
+                                className="absolute top-1 right-1 bg-black/70 hover:bg-black text-white rounded-full w-6 h-6 flex items-center justify-center cursor-pointer"
+                              >
+                                <span className="material-icons-outlined text-sm">close</span>
+                              </button>
+                            </div>
+                          )}
+
+                          {mostrarEmojisRecado && (
+                            <div className="mt-2 bg-[#0f0f0f] border border-[#303030] rounded-lg p-2 grid grid-cols-8 gap-1 max-w-md">
+                              {["😀","😂","🤣","😊","😍","🥰","😎","🤔","😅","😭","😡","🥳","😴","🤯","🤩","😇","👍","👎","👏","🙌","🙏","💪","✌️","🤝","❤️","🔥","✨","🎉","💀","💯","⭐","🌈","🍕","🍔","☕","🍺","⚽","🎮","🎬","🎵","📷","💻","📱","🚀","🌎","💣","🎁","🧠"].map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => {
+                                    setTextoRecado((prev) => prev + emoji);
+                                  }}
+                                  className="text-xl hover:bg-[#272727] rounded p-1 transition cursor-pointer"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => setMostrarEmojisRecado(!mostrarEmojisRecado)}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition cursor-pointer border ${
+                              mostrarEmojisRecado
+                                ? "bg-[#e888d3] text-black border-[#e888d3]"
+                                : "bg-[#0f0f0f] text-gray-300 border-[#303030] hover:border-[#e888d3]/50"
+                            }`}
+                            title="Emojis"
+                          >
+                            <span className="material-icons-outlined text-base">sentiment_satisfied</span>
+                            Emoji
+                          </button>
+
+                          <label className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium bg-[#0f0f0f] text-gray-300 border border-[#303030] hover:border-[#e888d3]/50 transition cursor-pointer">
+                            <span className="material-icons-outlined text-base">image</span>
+                            Foto
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.size > 3 * 1024 * 1024) { alert("Imagem muito grande! Máximo 3 MB."); return; }
+                                const reader = new FileReader();
+                                reader.onload = () => setImagemRecado(reader.result as string);
+                                reader.readAsDataURL(file);
+                                e.target.value = "";
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (!textoRecado.trim() && !imagemRecado) return;
+                            const novo = {
+                              id: Date.now(),
+                              autor: usuario,
+                              texto: textoRecado.trim(),
+                              imagem: imagemRecado || null,
+                              timestamp: Date.now(),
+                            };
+                            setRecados((prev) => ({
+                              ...prev,
+                              [usuario]: [novo, ...(prev[usuario] || [])],
+                            }));
+                            setTextoRecado("");
+                            setImagemRecado("");
+                            setMostrarEmojisRecado(false);
+                          }}
+                          className="bg-[#e888d3] hover:bg-[#d176be] text-black text-sm font-bold px-4 py-1.5 rounded-full transition cursor-pointer"
+                        >
+                          Enviar recado
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-400 text-center py-3">
+                      Faça login para escrever recados no seu mural
+                    </p>
+                  )}
+                </div>
+
+                <div className="border-t border-[#303030]">
+                  {usuario && (recados[usuario]?.length || 0) > 0 ? (
+                    recados[usuario].map((r: any) => (
+                      <div key={r.id} className="p-4 flex gap-3 border-b border-[#252525] last:border-b-0">
+                        <div onClick={() => abrirCanal(`@${r.autor}`)} className="cursor-pointer flex-shrink-0">
+                          {usuarios[r.autor]?.avatarUrl ? (
+                            <img src={usuarios[r.autor].avatarUrl} alt={r.autor} className="w-10 h-10 rounded-full object-cover hover:ring-2 hover:ring-[#e888d3] transition" />
+                          ) : (
+                            <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center hover:ring-2 hover:ring-[#e888d3] transition">
+                              <span className="material-icons-outlined text-white text-sm">person</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span onClick={() => abrirCanal(`@${r.autor}`)} className="font-medium text-sm text-[#e888d3] cursor-pointer hover:underline">@{r.autor}</span>
+                            <span className="text-gray-500 text-xs">{formatarTempo(r.timestamp)}</span>
+                          </div>
+                          {r.texto && <p className="text-sm text-gray-200 break-words whitespace-pre-wrap">{r.texto}</p>}
+                          {r.imagem && (
+                            <img
+                              src={r.imagem}
+                              alt="recado"
+                              className="mt-2 max-h-72 rounded-lg border border-[#303030] cursor-pointer"
+                              onClick={() => window.open(r.imagem, "_blank")}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center">
+                      <span className="material-icons-outlined text-4xl text-gray-600 mb-2">sticky_note_2</span>
+                      <p className="text-sm text-gray-400">Nenhum recado ainda</p>
+                      <p className="text-xs text-gray-500 mt-1">Seja o primeiro a deixar um recado!</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ===== VÍDEOS DA COMUNIDADE ===== */}
+              <div className="flex items-center justify-between flex-wrap gap-3 mt-8 mb-4">
+                <div>
+                  <h2 className="font-bold text-lg">Vídeos da comunidade</h2>
+                  <p className="text-gray-400 text-xs mt-0.5">{todosVideosLista.length} vídeos enviados</p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
+                    setMostrarUpload(true);
+                  }}
+                  className="flex items-center gap-2 bg-[#e888d3] hover:bg-[#d176be] text-black px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer"
+                >
+                  <span className="material-icons-outlined text-sm">add</span>
+                  Enviar vídeo
+                </button>
+              </div>
+
+              {todosVideosLista.length === 0 ? (
+                <div className="text-center py-16 bg-[#1c1c1c] rounded-2xl border border-[#303030]">
+                  <span className="material-icons-outlined text-5xl text-gray-600 mb-3">videocam_off</span>
+                  <p className="text-gray-400">Nenhum vídeo ainda.</p>
+                  <p className="text-gray-500 text-sm mt-2">Seja o primeiro a enviar!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 gap-y-8">
+                  {todosVideosLista.map((v) => {
+                    const info = getCanalInfo(v.canal);
+                    return (
+                      <div
+                        key={v.id}
+                        onClick={() => setVideoAssistindo(v)}
+                        className="cursor-pointer group"
+                      >
+                        <div className="relative w-full aspect-video rounded-xl overflow-hidden">
+                          <img src={v.thumb} className="w-full h-full object-cover group-hover:scale-105 transition-transform" alt={v.titulo} />
+                          <span className="absolute bottom-2 right-2 bg-black/80 text-xs px-1 rounded">{v.duracao}</span>
+                        </div>
+                        <div className="flex gap-3 mt-3">
+                          <div
+                            onClick={(e) => { e.stopPropagation(); abrirCanal(v.canal); }}
+                            className="cursor-pointer flex-shrink-0"
+                            title={`Ver perfil de ${v.canal}`}
+                          >
+                            {info.avatarUrl ? (
+                              <img src={info.avatarUrl} className="w-9 h-9 rounded-full object-cover hover:ring-2 hover:ring-[#e888d3] transition" alt={v.canal} />
+                            ) : (
+                              <div className={`w-9 h-9 ${info.cor} rounded-full flex items-center justify-center text-[10px] font-bold text-white hover:ring-2 hover:ring-[#e888d3] transition`}>
+                                {v.canal.replace("@", "").slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <h3 className="font-semibold text-sm line-clamp-2 leading-5 group-hover:text-[#e888d3] transition">{v.titulo}</h3>
+                            <p
+                              onClick={(e) => { e.stopPropagation(); abrirCanal(v.canal); }}
+                              className="text-gray-400 text-xs mt-1 cursor-pointer hover:text-[#e888d3] hover:underline"
+                            >{v.canal}</p>
+                            <p className="text-gray-400 text-xs">{viewsDoVideo(v)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : abaAtiva === "acompanhando" ? (
             <div className="p-6 max-w-5xl">
@@ -1635,7 +1690,7 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
                         const novoId = Date.now();
                         setMeusVideos([{ id: novoId, titulo: tituloModal, descricao: descModal || "Sem descrição.", url: modoUpload === "link" ? urlModal : arquivoVideo?.name || "", categoria: catModal, thumb: `https://picsum.photos/seed/${novoId}/640/360`, duracao: "00:00", canal: `@${usuario}`, views: "0 visualizações • agora", cor: "bg-pink-600" }, ...meusVideos]);
                         setViews((prev) => ({ ...prev, [novoId]: 0 }));
-                        setTituloModal(""); setDescModal(""); setUrlModal(""); setArquivoVideo(null); setCatModal("Videogames"); setModoUpload("arquivo");
+                        setTituloModal(""); setDescModal(""); setUrlModal(""); setArquivoVideo(null); setCatModal("Filmes"); setModoUpload("arquivo");
                         alert("Vídeo publicado!");
                       }}
                       className="w-full bg-[#e888d3] hover:bg-[#d176be] text-black font-bold py-2 rounded-full transition-all cursor-pointer"
@@ -1732,32 +1787,96 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
             </div>
           ) : (
             <div className="p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 gap-y-8 mt-2">
-                {videosFiltrados.length === 0 ? (
-                  <p className="text-gray-400 col-span-4">Nenhum vídeo encontrado</p>
-                ) : (
-                  videosFiltrados.map((v) => (
-                    <div key={v.id} onClick={() => setVideoAssistindo(v)} className="cursor-pointer group">
-                      <div className="relative w-full aspect-video rounded-xl overflow-hidden">
-                        <img src={v.thumb} className="w-full h-full object-cover group-hover:scale-105 transition-transform" alt={v.titulo} />
-                        <span className="absolute bottom-2 right-2 bg-black/80 text-xs px-1 rounded">{v.duracao}</span>
-                      </div>
-                      <div className="flex gap-3 mt-3">
-                        <div className={`w-9 h-9 ${v.cor} rounded-full flex-shrink-0`}></div>
-                        <div className="flex flex-col">
-                          <h3 className="font-semibold text-sm line-clamp-2 leading-5">{v.titulo}</h3>
-                          <p className="text-gray-400 text-xs mt-1">{v.canal}</p>
-                          <p className="text-gray-400 text-xs">{viewsDoVideo(v)}</p>
+              <div className="flex items-center justify-between flex-wrap gap-3 mt-2 mb-6">
+                <div>
+                  <h1 className="text-2xl font-bold mb-1">Filmes</h1>
+                  <p className="text-gray-400 text-sm">{todosOsFilmes.length} filmes disponíveis • dublado e legendado</p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
+                    setMostrarUploadFilme(true);
+                  }}
+                  className="flex items-center gap-2 bg-[#e888d3] hover:bg-[#d176be] text-black px-5 py-2.5 rounded-full text-sm font-bold transition-all cursor-pointer"
+                >
+                  <span className="material-icons-outlined text-base">add</span>
+                  Enviar filme
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 gap-y-8">
+                {todosOsFilmes.map((filme) => (
+                  <div
+                    key={filme.id}
+                    onClick={() => setFilmeSelecionado(filme)}
+                    className="cursor-pointer group"
+                  >
+                    <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-gradient-to-br from-[#1c1c1c] to-[#0f0f0f] border border-[#303030] group-hover:border-[#e888d3] transition">
+                      <img
+                        src={posters[filme.id] || `https://picsum.photos/seed/${filme.id}/640/360`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        alt={filme.titulo}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-14 h-14 bg-black/60 rounded-full flex items-center justify-center group-hover:bg-[#e888d3] transition">
+                          <span className="material-icons-outlined text-white group-hover:text-black text-3xl">play_arrow</span>
                         </div>
                       </div>
+                      <span className="absolute bottom-2 right-2 bg-black/80 text-xs px-2 py-0.5 rounded">Filme</span>
                     </div>
-                  ))
-                )}
+                    <div className="flex gap-3 mt-3">
+                      <div className="w-9 h-9 bg-[#e888d3] rounded-full flex-shrink-0 flex items-center justify-center">
+                        <span className="material-icons-outlined text-black text-sm">movie</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <h3 className="font-semibold text-sm line-clamp-2 leading-5 group-hover:text-[#e888d3] transition">
+                          {filme.titulo}
+                        </h3>
+                        <p className="text-gray-400 text-xs mt-1">{filme.ano}</p>
+                        <p className="text-gray-400 text-xs">Filme • HD</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </main>
       </div>
+
+      {/* ============ MODAL: CONFIRMAÇÃO NSFW ============ */}
+      {mostrarConfirmacaoNSFW && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[130] p-4">
+          <div className="bg-[#1c1c1c] rounded-2xl w-full max-w-md p-6 border border-[#e888d3]/40">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">
+                <span className="material-icons-outlined text-red-500 text-4xl">warning</span>
+              </div>
+            </div>
+            <h2 className="text-xl font-bold mb-2 text-center">Conteúdo adulto +18</h2>
+            <p className="text-sm text-gray-400 text-center mb-6 leading-relaxed">
+              Esta seção contém conteúdo sensível e impróprio para menores de 18 anos.<br />
+              Você confirma que tem <span className="text-[#e888d3] font-bold">18 anos ou mais</span>?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setMostrarConfirmacaoNSFW(false)}
+                className="flex-1 py-2.5 rounded-full bg-[#272727] hover:bg-[#3f3f3f] text-white font-medium transition cursor-pointer"
+              >Não, voltar</button>
+              <button
+                onClick={() => {
+                  setMostrarConfirmacaoNSFW(false);
+                  setAbaAtiva("nsfw");
+                  setVideoAssistindo(null);
+                  setCanalSelecionado(null);
+                  setFilmeSelecionado(null);
+                }}
+                className="flex-1 py-2.5 rounded-full bg-[#e888d3] hover:bg-[#d176be] text-black font-bold transition cursor-pointer"
+              >Sim, tenho 18+</button>
+            </div>
+            <p className="text-xs text-gray-500 text-center mt-4">Este aviso aparece toda vez que você entra.</p>
+          </div>
+        </div>
+      )}
 
       {/* ============ MODAL: LOGIN / CADASTRO ============ */}
       {mostrarLogin && (
@@ -1972,6 +2091,139 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
         </div>
       )}
 
+      {/* ============ MODAL: UPLOAD DE MEME ============ */}
+      {mostrarUploadMeme && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
+          <div className="bg-[#1c1c1c] p-6 rounded-2xl w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Postar meme</h2>
+              <button onClick={() => setMostrarUploadMeme(false)} className="material-icons-outlined text-gray-400 hover:text-white cursor-pointer">close</button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Título do meme"
+              value={tituloMemeInput}
+              onChange={(e) => setTituloMemeInput(e.target.value)}
+              className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-3 text-white outline-none focus:border-[#e888d3]"
+            />
+
+            <label className="flex flex-col items-center justify-center w-full bg-[#0f0f0f] border-2 border-dashed border-[#303030] hover:border-[#e888d3] rounded-lg px-4 py-6 mb-3 cursor-pointer transition">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 3 * 1024 * 1024) { alert("Imagem muito grande! Máximo 3 MB."); return; }
+                  setArquivoMeme(file);
+                  const reader = new FileReader();
+                  reader.onload = () => setImgMemeInput(reader.result as string);
+                  reader.readAsDataURL(file);
+                }}
+                className="hidden"
+              />
+              <span className="material-icons-outlined text-4xl text-gray-400 mb-2">image</span>
+              <span className="text-sm text-gray-300 text-center">
+                {arquivoMeme ? arquivoMeme.name : "Clique para escolher uma imagem"}
+              </span>
+            </label>
+
+            {imgMemeInput && (
+              <div className="mb-3 rounded-lg overflow-hidden border border-[#303030]">
+                <img src={imgMemeInput} alt="preview" className="w-full max-h-48 object-contain bg-black" />
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                if (!tituloMemeInput.trim()) { alert("Digite um título!"); return; }
+                if (!imgMemeInput) { alert("Escolha uma imagem!"); return; }
+                const novo = {
+                  id: `meme_${Date.now()}`,
+                  titulo: tituloMemeInput.trim(),
+                  thumb: imgMemeInput,
+                  autor: `@${usuario}`,
+                  likes: 0,
+                  dislikes: 0,
+                  comentarios: 0,
+                };
+                setMemesUsuarios([novo, ...memesUsuarios]);
+                setTituloMemeInput("");
+                setImgMemeInput("");
+                setArquivoMeme(null);
+                setMostrarUploadMeme(false);
+                alert("Meme postado! 😂");
+              }}
+              className="w-full bg-[#e888d3] hover:bg-[#d176be] text-black font-bold py-2 rounded-full transition-all cursor-pointer"
+            >Postar meme</button>
+          </div>
+        </div>
+      )}
+
+      {/* ============ MODAL: UPLOAD DE FILME ============ */}
+      {mostrarUploadFilme && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
+          <div className="bg-[#1c1c1c] p-6 rounded-2xl w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Enviar filme</h2>
+              <button onClick={() => setMostrarUploadFilme(false)} className="material-icons-outlined text-gray-400 hover:text-white cursor-pointer">close</button>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">
+              Cole o ID do IMDB do filme. Você acha ele na URL do site do IMDB, tipo:<br />
+              <span className="text-[#e888d3]">imdb.com/title/<b>tt0111161</b>/</span>
+            </p>
+
+            <input
+              type="text"
+              placeholder="Título do filme"
+              value={tituloFilmeInput}
+              onChange={(e) => setTituloFilmeInput(e.target.value)}
+              className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-3 text-white outline-none focus:border-[#e888d3]"
+            />
+            <input
+              type="text"
+              placeholder="Ano (ex: 1994)"
+              value={anoFilmeInput}
+              onChange={(e) => setAnoFilmeInput(e.target.value)}
+              className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-3 text-white outline-none focus:border-[#e888d3]"
+            />
+            <input
+              type="text"
+              placeholder="ID do IMDB (ex: tt0111161)"
+              value={imdbFilmeInput}
+              onChange={(e) => setImdbFilmeInput(e.target.value)}
+              className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-4 text-white outline-none focus:border-[#e888d3]"
+            />
+
+            <button
+              onClick={() => {
+                if (!tituloFilmeInput.trim()) { alert("Digite o título do filme!"); return; }
+                if (!imdbFilmeInput.trim()) { alert("Digite o ID do IMDB!"); return; }
+                if (!imdbFilmeInput.startsWith("tt")) { alert("O ID do IMDB precisa começar com 'tt' (ex: tt0111161)"); return; }
+                const novo = {
+                  id: imdbFilmeInput.trim(),
+                  titulo: tituloFilmeInput.trim(),
+                  ano: parseInt(anoFilmeInput) || new Date().getFullYear(),
+                  enviadoPor: usuario,
+                };
+                if (todosOsFilmes.some((f) => f.id === novo.id)) {
+                  alert("Esse filme já existe na lista!");
+                  return;
+                }
+                setFilmesUsuarios([novo, ...filmesUsuarios]);
+                setTituloFilmeInput("");
+                setAnoFilmeInput("");
+                setImdbFilmeInput("");
+                setMostrarUploadFilme(false);
+                alert("Filme adicionado com sucesso! 🎬");
+              }}
+              className="w-full bg-[#e888d3] hover:bg-[#d176be] text-black font-bold py-2 rounded-full transition-all cursor-pointer"
+            >Adicionar filme</button>
+          </div>
+        </div>
+      )}
+
       {/* ============ MODAL: UPLOAD ============ */}
       {mostrarUpload && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
@@ -2037,8 +2289,8 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
                     const novoId = Date.now();
                     setMeusVideos([{ id: novoId, titulo: tituloModal, descricao: descModal || "Sem descrição.", url: modoUpload === "link" ? urlModal : arquivoVideo?.name || "", categoria: catModal, thumb: `https://picsum.photos/seed/${novoId}/640/360`, duracao: "00:00", canal: `@${usuario}`, views: "0 visualizações • agora", cor: "bg-pink-600" }, ...meusVideos]);
                     setViews((prev) => ({ ...prev, [novoId]: 0 }));
-                    setTituloModal(""); setDescModal(""); setUrlModal(""); setArquivoVideo(null); setCatModal("Videogames"); setModoUpload("arquivo");
-                    setMostrarUpload(false); setCanalSelecionado(`@${usuario}`); setAbaAtiva("canal-externo"); setVideoAssistindo(null);
+                    setTituloModal(""); setDescModal(""); setUrlModal(""); setArquivoVideo(null); setCatModal("Filmes"); setModoUpload("arquivo");
+                    setMostrarUpload(false); setAbaAtiva("social"); setVideoAssistindo(null);
                   }}
                   className="w-full bg-[#e888d3] hover:bg-[#d176be] text-black font-bold py-2 rounded-full transition-all cursor-pointer"
                 >Publicar vídeo</button>
@@ -2175,10 +2427,37 @@ const [idiomaFilme, setIdiomaFilme] = useState<"dublado" | "legendado">("dublado
         </div>
       )}
 
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
+
+        /* ============ MODO CLARO ============ */
+        .modo-claro { background-color: #f0f2f5 !important; color: #1a1a1a; }
+
+        .modo-claro [class*="bg-[#0f0f0f]"] { background-color: #f0f2f5 !important; }
+        .modo-claro [class*="bg-[#121212]"] { background-color: #ffffff !important; }
+        .modo-claro [class*="bg-[#1c1c1c]"] { background-color: #ffffff !important; }
+        .modo-claro [class*="bg-[#161616]"] { background-color: #f8f9fa !important; }
+        .modo-claro [class*="bg-[#222222]"] { background-color: #e4e6eb !important; }
+        .modo-claro [class*="bg-[#272727]"] { background-color: #e4e6eb !important; }
+
+        .modo-claro [class*="border-[#303030]"] { border-color: #d0d3d8 !important; }
+        .modo-claro [class*="border-[#2a2a2a]"] { border-color: #d0d3d8 !important; }
+        .modo-claro [class*="border-[#252525]"] { border-color: #e4e6eb !important; }
+
+        .modo-claro [class*="text-white"] { color: #1a1a1a !important; }
+        .modo-claro [class*="text-gray-300"] { color: #4a4a4a !important; }
+        .modo-claro [class*="text-gray-400"] { color: #65676b !important; }
+        .modo-claro [class*="text-gray-200"] { color: #3a3a3a !important; }
+        .modo-claro [class*="text-gray-500"] { color: #888 !important; }
+
+        .modo-claro input, .modo-claro textarea, .modo-claro select {
+          background-color: #ffffff !important;
+          color: #1a1a1a !important;
+        }
+        .modo-claro input::placeholder,
+        .modo-claro textarea::placeholder { color: #888 !important; }
+      ` }} />
     </div>
   );
 }
