@@ -1158,7 +1158,13 @@ export default function Home() {
         if (storyAberto.index < stories.length - 1) {
           abrirStory(storyAberto.usuario, storyAberto.index + 1);
         } else {
-          setStoryAberto(null);
+          const listaUsuarios = Object.keys(storiesVisiveis).filter(u => (storiesVisiveis[u] || []).length > 0);
+          const posAtual = listaUsuarios.indexOf(storyAberto.usuario);
+          if (posAtual >= 0 && posAtual < listaUsuarios.length - 1) {
+            abrirStory(listaUsuarios[posAtual + 1], 0);
+          } else {
+            setStoryAberto(null);
+          }
         }
       }
     }, 50);
@@ -1414,6 +1420,7 @@ export default function Home() {
         de: m.from_profile?.username,
         para: m.to_profile?.username,
         texto: m.texto,
+        story_image: m.story_image,
         timestamp: new Date(m.created_at).getTime(),
         lida: m.lida,
       }));
@@ -1568,7 +1575,13 @@ export default function Home() {
     if (storyAberto.index < stories.length - 1) {
       abrirStory(storyAberto.usuario, storyAberto.index + 1);
     } else {
-      setStoryAberto(null);
+      const listaUsuarios = Object.keys(storiesVisiveis).filter(u => (storiesVisiveis[u] || []).length > 0);
+      const posAtual = listaUsuarios.indexOf(storyAberto.usuario);
+      if (posAtual >= 0 && posAtual < listaUsuarios.length - 1) {
+        abrirStory(listaUsuarios[posAtual + 1], 0);
+      } else {
+        setStoryAberto(null);
+      }
     }
   };
 
@@ -1577,7 +1590,15 @@ export default function Home() {
     if (storyAberto.index > 0) {
       abrirStory(storyAberto.usuario, storyAberto.index - 1);
     } else {
-      setStoryAberto(null);
+      const listaUsuarios = Object.keys(storiesVisiveis).filter(u => (storiesVisiveis[u] || []).length > 0);
+      const posAtual = listaUsuarios.indexOf(storyAberto.usuario);
+      if (posAtual > 0) {
+        const usuarioAnterior = listaUsuarios[posAtual - 1];
+        const storiesAnterior = todosOsStories[usuarioAnterior] || [];
+        abrirStory(usuarioAnterior, Math.max(0, storiesAnterior.length - 1));
+      } else {
+        setStoryAberto(null);
+      }
     }
   };
 
@@ -3078,7 +3099,7 @@ export default function Home() {
         if (!storyAtual) return null;
         return (
           <div className="fixed inset-0 bg-black z-[200] flex items-center justify-center">
-            <div className="relative w-full h-full max-w-md">
+            <div className="relative w-full h-full max-w-md max-h-[100vh] mx-auto" style={{ aspectRatio: "9/16", maxWidth: "min(100vw, calc(100vh * 9 / 16))" }}>
               <div className="absolute top-4 left-2 right-2 flex gap-1 z-20">
                 {stories.map((_: any, i: number) => (
                   <div key={i} className="flex-1 h-0.5 bg-white/30 rounded-full overflow-hidden">
@@ -3101,7 +3122,7 @@ export default function Home() {
                 <button onClick={() => setStoryAberto(null)} className="material-icons-outlined text-white cursor-pointer drop-shadow hover:scale-110 transition">close</button>
               </div>
 
-              <img src={storyAtual.imagem} alt={`story de ${storyAberto.usuario}`} className="w-full h-full object-cover" />
+              <img src={storyAtual.imagem} alt={`story de ${storyAberto.usuario}`} className="absolute inset-0 w-full h-full object-contain" />
 
               {storyAtual.texto && (
                 <div className="absolute inset-x-0 bottom-24 px-6 z-20 pointer-events-none">
@@ -3142,7 +3163,8 @@ export default function Home() {
                           const { data: novaMsg } = await supabase.from("messages").insert({
                             from_id: user.id,
                             to_id: paraId,
-                            texto: `📸 Story: ${textoResp}`,
+                            texto: textoResp,
+                            story_image: storyAtual?.imagem || null,
                           }).select("*, from_profile:profiles!messages_from_id_fkey(username), to_profile:profiles!messages_to_id_fkey(username)").single();
 
                           if (novaMsg) setMensagensBanco((prev) => [...prev, novaMsg]);
@@ -3164,7 +3186,8 @@ export default function Home() {
                         const { data: novaMsg } = await supabase.from("messages").insert({
                           from_id: user.id,
                           to_id: paraId,
-                          texto: `📸 Story: ${textoResp}`,
+                          texto: textoResp,
+                          story_image: storyAtual?.imagem || null,
                         }).select("*, from_profile:profiles!messages_from_id_fkey(username), to_profile:profiles!messages_to_id_fkey(username)").single();
 
                         if (novaMsg) setMensagensBanco((prev) => [...prev, novaMsg]);
@@ -3733,12 +3756,12 @@ export default function Home() {
                       const ultima = msgs[msgs.length - 1];
                       const ativo = conversaAtiva === contato;
                       return (
-                        <div key={contato} onClick={() => { setConversaAtiva(contato); marcarComoLida(contato); }} className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition ${ativo ? "bg-[#e888d3]/10 border-l-2 border-[#e888d3]" : "hover:bg-[#272727]"}`}>
-                          <div className="flex-shrink-0">
-                            {info.avatarUrl ? <img src={info.avatarUrl} className="w-12 h-12 rounded-full object-cover" alt={contato} /> : <div className={`w-12 h-12 ${info.cor} rounded-full flex items-center justify-center text-sm font-bold text-white`}>{contato.slice(0, 2).toUpperCase()}</div>}
+                        <div key={contato} className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition ${ativo ? "bg-[#e888d3]/10 border-l-2 border-[#e888d3]" : "hover:bg-[#272727]"}`}>
+                          <div className="flex-shrink-0" onClick={(e) => { e.stopPropagation(); abrirPerfilDoChat(contato); }}>
+                            {info.avatarUrl ? <img src={info.avatarUrl} className="w-12 h-12 rounded-full object-cover hover:ring-2 hover:ring-[#e888d3] transition" alt={contato} /> : <div className={`w-12 h-12 ${info.cor} rounded-full flex items-center justify-center text-sm font-bold text-white hover:ring-2 hover:ring-[#e888d3] transition`}>{contato.slice(0, 2).toUpperCase()}</div>}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">@{contato}</p>
+                          <div className="flex-1 min-w-0" onClick={() => { setConversaAtiva(contato); marcarComoLida(contato); }}>
+                            <p className="font-medium text-sm truncate hover:text-[#e888d3] transition">@{contato}</p>
                             <p className="text-xs text-gray-400 truncate">{ultima ? ultima.texto : "Diga oi!"}</p>
                           </div>
                         </div>
@@ -3758,12 +3781,12 @@ export default function Home() {
                   <>
                     <div className="flex items-center gap-3 px-4 py-3 border-b border-[#303030]">
                       <button onClick={() => setConversaAtiva(null)} className="md:hidden material-icons-outlined text-gray-400 cursor-pointer">arrow_back</button>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition" onClick={() => abrirPerfilDoChat(conversaAtiva)}>
                         {(() => {
                           const info = getCanalInfo(`@${conversaAtiva}`);
                           return info.avatarUrl ? <img src={info.avatarUrl} className="w-9 h-9 rounded-full object-cover" alt={conversaAtiva} /> : <div className={`w-9 h-9 ${info.cor} rounded-full flex items-center justify-center text-xs font-bold text-white`}>{conversaAtiva.slice(0, 2).toUpperCase()}</div>;
                         })()}
-                        <p className="font-medium text-sm">@{conversaAtiva}</p>
+                        <p className="font-medium text-sm hover:text-[#e888d3]">@{conversaAtiva}</p>
                       </div>
                     </div>
 
@@ -3772,7 +3795,17 @@ export default function Home() {
                         const ehMinha = msg.de === usuario;
                         return (
                           <div key={i} className={`flex ${ehMinha ? "justify-end" : "justify-start"}`}>
-                            <div className={`max-w-[75%] px-4 py-2 rounded-2xl text-sm ${ehMinha ? "bg-[#e888d3] text-black rounded-br-md" : "bg-[#272727] text-white rounded-bl-md"}`}>{msg.texto}</div>
+                            <div className={`max-w-[75%] px-4 py-2 rounded-2xl text-sm ${ehMinha ? "bg-[#e888d3] text-black rounded-br-md" : "bg-[#272727] text-white rounded-bl-md"}`}>
+                              {msg.story_image && (
+                                <img
+                                  src={msg.story_image}
+                                  alt="story"
+                                  className="rounded-lg mb-2 max-h-48 object-cover cursor-pointer"
+                                  onClick={() => window.open(msg.story_image, "_blank")}
+                                />
+                              )}
+                              {msg.texto}
+                            </div>
                           </div>
                         );
                       })}
