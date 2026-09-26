@@ -496,6 +496,7 @@ export default function Home() {
   const [textoRespostaMeme, setTextoRespostaMeme] = useState("");
 
   const [postsUsuarios, setPostsUsuarios] = useState<{ [usuario: string]: any[] }>({});
+  const [postsBanco, setPostsBanco] = useState<{ [usuario: string]: any[] }>({});
   const [mostrarUploadPost, setMostrarUploadPost] = useState(false);
   const [imgPostInput, setImgPostInput] = useState("");
   const [legendaPostInput, setLegendaPostInput] = useState("");
@@ -604,8 +605,7 @@ export default function Home() {
 
     // (solicitações agora vêm do Supabase)
 
-    const postsSalvos = localStorage.getItem("nosafee_posts");
-    if (postsSalvos) setPostsUsuarios(JSON.parse(postsSalvos));
+    // (posts agora vêm do Supabase)
 
     const postCurtidasSalvas = localStorage.getItem("nosafee_post_curtidas");
     if (postCurtidasSalvas) setPostCurtidas(JSON.parse(postCurtidasSalvas));
@@ -765,6 +765,66 @@ export default function Home() {
         setComentariosMemesBanco(mapa);
       }
 
+      // ============ POSTS DO BANCO ============
+      const { data: postsData, error: erroPosts } = await supabase
+        .from("posts")
+        .select("*, profiles!posts_user_id_fkey(username)")
+        .order("created_at", { ascending: false });
+
+      if (erroPosts) console.error("ERRO posts:", erroPosts);
+
+      if (postsData) {
+        const agrupados: { [usuario: string]: any[] } = {};
+        postsData.forEach((p: any) => {
+          const autorNome = p.profiles?.username || "desconhecido";
+          if (!agrupados[autorNome]) agrupados[autorNome] = [];
+          agrupados[autorNome].push({
+            id: `db_post_${p.id}`,
+            dbId: p.id,
+            autor: autorNome,
+            imagem: p.imagem,
+            legenda: p.legenda || null,
+            timestamp: new Date(p.created_at).getTime(),
+          });
+        });
+        setPostsBanco(agrupados);
+      }
+
+      // Curtidas em posts
+      const { data: postLikesData } = await supabase
+        .from("post_likes")
+        .select("post_id, profiles!post_likes_user_id_fkey(username)");
+      if (postLikesData) {
+        const mapa: { [id: string]: string[] } = {};
+        postLikesData.forEach((l: any) => {
+          const chave = `db_post_${l.post_id}`;
+          if (!mapa[chave]) mapa[chave] = [];
+          mapa[chave].push(l.profiles?.username || "");
+        });
+        setPostCurtidas((prev: any) => ({ ...prev, ...mapa }));
+      }
+
+      // Comentários em posts
+      const { data: postCommentsData } = await supabase
+        .from("post_comments")
+        .select("id, post_id, texto, created_at, profiles!post_comments_user_id_fkey(username)")
+        .order("created_at", { ascending: false });
+      if (postCommentsData) {
+        const mapa: { [id: string]: any[] } = {};
+        postCommentsData.forEach((c: any) => {
+          const chave = `db_post_${c.post_id}`;
+          if (!mapa[chave]) mapa[chave] = [];
+          mapa[chave].push({
+            id: c.id,
+            autor: c.profiles?.username || "anônimo",
+            texto: c.texto,
+            timestamp: new Date(c.created_at).getTime(),
+            dbId: c.id,
+          });
+        });
+        setComentariosPosts((prev: any) => ({ ...prev, ...mapa }));
+      }
+
       // ============ RECADOS DO BANCO ============
       const { data: recadosData, error: erroRecados } = await supabase
         .from("recados")
@@ -899,7 +959,7 @@ export default function Home() {
   // (recados agora vão pro Supabase)
   useEffect(() => { if (carregou) safeSetItem("nosafee_modo_claro", modoClaro); }, [modoClaro, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_solicitacoes", solicitacoes); }, [solicitacoes, carregou]);
-  useEffect(() => { if (carregou) safeSetItem("nosafee_posts", postsUsuarios); }, [postsUsuarios, carregou]);
+  // (posts agora vão pro Supabase)
   useEffect(() => { if (carregou) safeSetItem("nosafee_post_curtidas", postCurtidas); }, [postCurtidas, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_post_comentarios", comentariosPosts); }, [comentariosPosts, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_stories", storiesUsuarios); }, [storiesUsuarios, carregou]);
@@ -1831,13 +1891,28 @@ export default function Home() {
                         <div className="px-4 py-3 border-t border-[#303030] flex items-center gap-4">
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
+                              const jaCurtiu = (postCurtidas[idPost] || []).includes(usuario);
                               setPostCurtidas((prev) => {
                                 const atuais = prev[idPost] || [];
                                 if (atuais.includes(usuario)) return { ...prev, [idPost]: atuais.filter((u) => u !== usuario) };
                                 return { ...prev, [idPost]: [...atuais, usuario] };
                               });
+
+                              try {
+                                const { data: { user } } = await supabase.auth.getUser();
+                                if (user && typeof postAberto.id === "string" && postAberto.id.startsWith("db_post_")) {
+                                  const idNum = parseInt(postAberto.id.replace("db_post_", ""));
+                                  if (!isNaN(idNum)) {
+                                    if (jaCurtiu) {
+                                      await supabase.from("post_likes").delete().eq("post_id", idNum).eq("user_id", user.id);
+                                    } else {
+                                      await supabase.from("post_likes").insert({ post_id: idNum, user_id: user.id });
+                                    }
+                                  }
+                                }
+                              } catch (err) { console.error("Erro curtir post:", err); }
                             }}
                             className={`flex items-center gap-2 transition cursor-pointer ${curtiu ? "text-[#e888d3]" : "text-gray-400 hover:text-[#e888d3]"}`}
                           >
@@ -1895,24 +1970,46 @@ export default function Home() {
                                 placeholder="Adicione um comentário..."
                                 value={textoComentarioPost}
                                 onChange={(e) => setTextoComentarioPost(e.target.value)}
-                                onKeyDown={(e) => {
+                                onKeyDown={async (e) => {
                                   if (e.key === "Enter" && !e.shiftKey) {
                                     e.preventDefault();
                                     if (!textoComentarioPost.trim()) return;
-                                    const novo = { id: Date.now(), autor: usuario, texto: textoComentarioPost.trim(), timestamp: Date.now() };
+                                    const texto = textoComentarioPost.trim();
+                                    const novo = { id: Date.now(), autor: usuario, texto, timestamp: Date.now() };
                                     setComentariosPosts((prev) => ({ ...prev, [idPost]: [...(prev[idPost] || []), novo] }));
                                     setTextoComentarioPost("");
+
+                                    try {
+                                      const { data: { user } } = await supabase.auth.getUser();
+                                      if (user && typeof postAberto.id === "string" && postAberto.id.startsWith("db_post_")) {
+                                        const idNum = parseInt(postAberto.id.replace("db_post_", ""));
+                                        if (!isNaN(idNum)) {
+                                          await supabase.from("post_comments").insert({ post_id: idNum, user_id: user.id, texto });
+                                        }
+                                      }
+                                    } catch (err) { console.error("Erro comentar post:", err); }
                                   }
                                 }}
                                 className="flex-1 bg-[#0f0f0f] border border-[#303030] rounded-full px-4 py-2 text-sm text-white outline-none focus:border-[#e888d3]"
                               />
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   if (!textoComentarioPost.trim()) return;
-                                  const novo = { id: Date.now(), autor: usuario, texto: textoComentarioPost.trim(), timestamp: Date.now() };
+                                  const texto = textoComentarioPost.trim();
+                                  const novo = { id: Date.now(), autor: usuario, texto, timestamp: Date.now() };
                                   setComentariosPosts((prev) => ({ ...prev, [idPost]: [...(prev[idPost] || []), novo] }));
                                   setTextoComentarioPost("");
+
+                                  try {
+                                    const { data: { user } } = await supabase.auth.getUser();
+                                    if (user && typeof postAberto.id === "string" && postAberto.id.startsWith("db_post_")) {
+                                      const idNum = parseInt(postAberto.id.replace("db_post_", ""));
+                                      if (!isNaN(idNum)) {
+                                        await supabase.from("post_comments").insert({ post_id: idNum, user_id: user.id, texto });
+                                      }
+                                    }
+                                  } catch (err) { console.error("Erro comentar post:", err); }
                                 }}
                                 disabled={!textoComentarioPost.trim()}
                                 className="w-9 h-9 rounded-full bg-[#e888d3] hover:bg-[#d176be] disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition cursor-pointer flex-shrink-0"
@@ -1996,7 +2093,7 @@ export default function Home() {
                 const seguidores = getSeguidores(canalSelecionado);
                 const ehMeuPerfil = logado && canalSelecionado === `@${usuario}`;
                 const nomeLimpo = canalSelecionado.replace("@", "");
-                const posts = postsUsuarios[nomeLimpo] || [];
+                               const posts = [...(postsBanco[nomeLimpo] || []), ...(postsUsuarios[nomeLimpo] || [])];
                 return (
                   <>
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-8">
@@ -3129,16 +3226,36 @@ export default function Home() {
             )}
             <textarea placeholder="Escreva uma legenda... (opcional)" value={legendaPostInput} onChange={(e) => setLegendaPostInput(e.target.value.slice(0, 300))} rows={3} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-1 text-white outline-none focus:border-[#e888d3] resize-none"></textarea>
             <p className="text-xs text-gray-500 mb-4 text-right">{legendaPostInput.length}/300</p>
-            <button onClick={() => {
+            <button onClick={async () => {
               if (!imgPostInput) { alert("Escolha uma imagem!"); return; }
-              const novo = { id: Date.now(), autor: usuario, imagem: imgPostInput, legenda: legendaPostInput.trim() || null, timestamp: Date.now() };
-              setPostsUsuarios((prev) => {
-                const atualizado = { ...prev, [usuario]: [novo, ...(prev[usuario] || [])] };
-                localStorage.setItem("nosafee_posts", JSON.stringify(atualizado));
-                return atualizado;
-              });
+              const legenda = legendaPostInput.trim() || null;
               setImgPostInput(""); setLegendaPostInput(""); setArquivoPost(null); setMostrarUploadPost(false); setAbaPerfil("posts");
-              alert("Post criado!");
+
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) { alert("Faça login primeiro"); return; }
+
+                const { data: salvo, error: erro } = await supabase.from("posts").insert({
+                  user_id: user.id,
+                  imagem: imgPostInput,
+                  legenda,
+                }).select().single();
+
+                if (erro) { console.error("Erro salvar post:", erro); alert("Erro ao salvar"); return; }
+
+                if (salvo) {
+                  const novo = {
+                    id: `db_post_${salvo.id}`,
+                    dbId: salvo.id,
+                    autor: usuario,
+                    imagem: salvo.imagem,
+                    legenda: salvo.legenda,
+                    timestamp: new Date(salvo.created_at).getTime(),
+                  };
+                  setPostsBanco((prev) => ({ ...prev, [usuario]: [novo, ...(prev[usuario] || [])] }));
+                  alert("Post criado!");
+                }
+              } catch (err) { console.error("Erro:", err); }
             }} className="w-full bg-[#e888d3] hover:bg-[#d176be] text-black font-bold py-2 rounded-full transition-all cursor-pointer">Publicar post</button>
           </div>
         </div>
