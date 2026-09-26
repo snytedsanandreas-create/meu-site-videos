@@ -453,6 +453,7 @@ export default function Home() {
   const [comentariosBanco, setComentariosBanco] = useState<{ [videoId: string]: any[] }>({});
   const [views, setViews] = useState<{ [videoId: string]: number }>({});
   const [notificacoes, setNotificacoes] = useState<{ [userId: string]: any[] }>({});
+  const [notificacoesBanco, setNotificacoesBanco] = useState<any[]>([]);
   const [mostrarNotificacoes, setMostrarNotificacoes] = useState(false);
   const [abaCanal, setAbaCanal] = useState<"videos" | "editar">("videos");
   const [novoUsuario, setNovoUsuario] = useState("");
@@ -583,8 +584,7 @@ export default function Home() {
       setViews(seeds);
     }
 
-    const notifSalvas = localStorage.getItem("nosafee_notificacoes");
-    if (notifSalvas) setNotificacoes(JSON.parse(notifSalvas));
+    // (notificações agora vêm do Supabase)
 
     const filmesSalvos = localStorage.getItem("nosafee_filmes");
     if (filmesSalvos) setFilmesUsuarios(JSON.parse(filmesSalvos));
@@ -763,6 +763,43 @@ export default function Home() {
           });
         });
         setComentariosMemesBanco(mapa);
+      }
+
+      // ============ NOTIFICAÇÕES DO BANCO ============
+      
+      if (session?.user) {
+        const { data: notifData, error: erroNotifDbg } = await supabase
+          .from("notificacoes")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        
+
+        if (notifData && notifData.length > 0) {
+          const idsDeUsers = new Set<string>();
+          notifData.forEach((n: any) => { if (n.de_user_id) idsDeUsers.add(n.de_user_id); });
+
+          const { data: perfisDe } = await supabase
+            .from("profiles")
+            .select("id, username")
+            .in("id", Array.from(idsDeUsers));
+
+          const mapaDe: { [id: string]: string } = {};
+          (perfisDe || []).forEach((p: any) => { mapaDe[p.id] = p.username; });
+
+          setNotificacoesBanco(notifData.map((n: any) => ({
+            id: n.id,
+            tipo: n.tipo,
+            de: mapaDe[n.de_user_id] || "?",
+            videoId: n.video_id,
+            videoTitulo: n.video_titulo,
+            texto: n.texto,
+            lida: n.lida,
+            timestamp: new Date(n.created_at).getTime(),
+          })));
+        }
       }
 
       // ============ POSTS DO BANCO ============
@@ -950,7 +987,7 @@ export default function Home() {
   // (mensagens agora vão pro Supabase, não pro localStorage)
   useEffect(() => { if (carregou) safeSetItem("nosafee_curtidas", curtidas); }, [curtidas, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_views", views); }, [views, carregou]);
-  useEffect(() => { if (carregou) safeSetItem("nosafee_notificacoes", notificacoes); }, [notificacoes, carregou]);
+  // (notificações agora vão pro Supabase)
   useEffect(() => { if (carregou) safeSetItem("nosafee_filmes", filmesUsuarios); }, [filmesUsuarios, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_memes", memesUsuarios); }, [memesUsuarios, carregou]);
   useEffect(() => { if (carregou) safeSetItem("nosafee_meme_curtidas", memeCurtidas); }, [memeCurtidas, carregou]);
@@ -1135,8 +1172,14 @@ export default function Home() {
       const video = todosOsVideosDoSite().find((v) => v.id === videoId);
       if (!video) return;
       const dono = video.canal.replace("@", "");
-      if (dono !== usuario && usuarios[dono]) {
-        adicionarNotificacao(dono, { tipo: "curtida", de: usuario, videoId: video.id, videoTitulo: video.titulo, texto: `@${usuario} curtiu seu vídeo` });
+      if (dono !== usuario && usuarios[dono]?.idSupabase) {
+        await adicionarNotificacao(dono, {
+          tipo: "curtida",
+          de: usuario,
+          videoId: video.dbId || null,
+          videoTitulo: video.titulo,
+          texto: `@${usuario} curtiu seu vídeo "${video.titulo.substring(0, 40)}${video.titulo.length > 40 ? "..." : ""}"`
+        });
       }
     }
   };
@@ -1146,11 +1189,21 @@ export default function Home() {
     return user?.id || null;
   };
 
-  const adicionarNotificacao = (paraUsuario: string, notif: any) => {
-    setNotificacoes((prev) => {
-      const atuais = prev[paraUsuario] || [];
-      return { ...prev, [paraUsuario]: [{ ...notif, id: Date.now() + Math.random(), timestamp: Date.now(), lida: false }, ...atuais].slice(0, 50) };
-    });
+  const adicionarNotificacao = async (paraUsuario: string, notif: any) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const paraId = usuarios[paraUsuario]?.idSupabase;
+      if (!user || !paraId) return;
+
+      await supabase.from("notificacoes").insert({
+        user_id: paraId,
+        de_user_id: user.id,
+        tipo: notif.tipo,
+        video_id: notif.videoId || null,
+        video_titulo: notif.videoTitulo || null,
+        texto: notif.texto,
+      });
+    } catch (err) { console.error("Erro notificação:", err); }
   };
 
   const formatarTempo = (timestamp: number) => {
@@ -1165,12 +1218,25 @@ export default function Home() {
     return new Date(timestamp).toLocaleDateString("pt-BR");
   };
 
-  const minhasNotificacoes = usuario ? notificacoes[usuario] || [] : [];
+  
+  const minhasNotificacoes = usuario ? notificacoesBanco : [];
   const naoLidasNotif = minhasNotificacoes.filter((n) => !n.lida).length;
-  const limparNotificacoes = () => { if (usuario) setNotificacoes((prev) => ({ ...prev, [usuario]: [] })); };
-  const marcarNotifComoLida = (id: number) => {
+  const limparNotificacoes = async () => {
     if (!usuario) return;
-    setNotificacoes((prev) => ({ ...prev, [usuario]: (prev[usuario] || []).map((n) => n.id === id ? { ...n, lida: true } : n) }));
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("notificacoes").delete().eq("user_id", user.id);
+        setNotificacoesBanco([]);
+      }
+    } catch (err) { console.error("Erro limpar notif:", err); }
+  };
+  const marcarNotifComoLida = async (id: number) => {
+    if (!usuario) return;
+    setNotificacoesBanco((prev) => prev.map((n) => n.id === id ? { ...n, lida: true } : n));
+    try {
+      await supabase.from("notificacoes").update({ lida: true }).eq("id", id);
+    } catch (err) { console.error("Erro marcar lida:", err); }
   };
 
   const seguirCanal = async (canal: string) => {
@@ -1753,7 +1819,26 @@ export default function Home() {
                         </div>
                       ) : (
                         minhasNotificacoes.map((n) => (
-                          <div key={n.id} onClick={() => { marcarNotifComoLida(n.id); setMostrarNotificacoes(false); }} className={`flex items-start gap-3 px-4 py-3 border-b border-[#252525] hover:bg-[#222] transition cursor-pointer ${!n.lida ? "bg-[#e888d3]/5" : ""}`}>
+                          <div key={n.id} onClick={() => {
+                              marcarNotifComoLida(n.id);
+                              setMostrarNotificacoes(false);
+                              if (n.tipo === "curtida" && n.videoId) {
+                                const video = todosVideosLista.find((v: any) => v.id === `db_${n.videoId}` || v.dbId === n.videoId);
+                                if (video) {
+                                  setVideoAssistindo(video);
+                                  setCanalSelecionado(null);
+                                  setFilmeSelecionado(null);
+                                } else {
+                                  setCanalSelecionado(`@${n.de}`);
+                                  setAbaAtiva("canal-externo");
+                                }
+                              } else {
+                                setCanalSelecionado(`@${n.de}`);
+                                setAbaAtiva("canal-externo");
+                                setVideoAssistindo(null);
+                                setFilmeSelecionado(null);
+                              }
+                            }} className={`flex items-start gap-3 px-4 py-3 border-b border-[#252525] hover:bg-[#222] transition cursor-pointer ${!n.lida ? "bg-[#e888d3]/5" : ""}`}>
                             <div className="w-10 h-10 rounded-full bg-[#e888d3] flex items-center justify-center flex-shrink-0">
                               <span className="material-icons-outlined text-black text-lg">{n.tipo === "seguidor" ? "person_add" : n.tipo === "curtida" ? "thumb_up" : "chat"}</span>
                             </div>
