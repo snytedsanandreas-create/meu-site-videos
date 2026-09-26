@@ -528,6 +528,7 @@ export default function Home() {
   });
 
   const [storiesUsuarios, setStoriesUsuarios] = useState<{ [usuario: string]: any[] }>({});
+  const [storiesBanco, setStoriesBanco] = useState<{ [usuario: string]: any[] }>({});
   const [storiesVistos, setStoriesVistos] = useState<{ [storyId: string]: string[] }>({});
   const [storyAberto, setStoryAberto] = useState<{ usuario: string; index: number } | null>(null);
   const [progressoStory, setProgressoStory] = useState(0);
@@ -765,7 +766,57 @@ export default function Home() {
         setComentariosMemesBanco(mapa);
       }
 
-      // ============ NOTIFICAÇÕES DO BANCO ============
+            // ============ STORIES DO BANCO ============
+      const { data: storiesData } = await supabase
+        .from("stories")
+        .select("*, profiles!stories_user_id_fkey(username)")
+        .gt("expira_em", new Date().toISOString())
+        .order("created_at", { ascending: false });
+
+      if (storiesData) {
+        const agrupados: { [usuario: string]: any[] } = {};
+        storiesData.forEach((s: any) => {
+          const autorNome = s.profiles?.username || "desconhecido";
+          if (!agrupados[autorNome]) agrupados[autorNome] = [];
+          agrupados[autorNome].push({
+            id: `db_story_${s.id}`,
+            dbId: s.id,
+            autor: autorNome,
+            imagem: s.imagem,
+            texto: s.texto || null,
+            timestamp: new Date(s.created_at).getTime(),
+          });
+        });
+        Object.values(agrupados).forEach((lista: any) => lista.sort((a: any, b: any) => a.timestamp - b.timestamp));
+        setStoriesBanco(agrupados);
+      }
+
+      const { data: viewsData } = await supabase
+        .from("story_views")
+        .select("story_id, profiles!story_views_user_id_fkey(username)");
+      if (viewsData) {
+        const mapaViews: { [storyId: string]: string[] } = {};
+        viewsData.forEach((v: any) => {
+          const chave = `db_story_${v.story_id}`;
+          if (!mapaViews[chave]) mapaViews[chave] = [];
+          mapaViews[chave].push(v.profiles?.username || "");
+        });
+        setStoriesVistos((prev: any) => ({ ...prev, ...mapaViews }));
+      }
+
+      const { data: curtidasStoriesData } = await supabase
+        .from("story_likes")
+        .select("story_id, profiles!story_likes_user_id_fkey(username)");
+      if (curtidasStoriesData) {
+        const mapaCur: { [storyId: string]: string[] } = {};
+        curtidasStoriesData.forEach((c: any) => {
+          const chave = `db_story_${c.story_id}`;
+          if (!mapaCur[chave]) mapaCur[chave] = [];
+          mapaCur[chave].push(c.profiles?.username || "");
+        });
+        setStoryCurtidas((prev: any) => ({ ...prev, ...mapaCur }));
+      }
+// ============ NOTIFICAÇÕES DO BANCO ============
       
       if (session?.user) {
         const { data: notifData, error: erroNotifDbg } = await supabase
@@ -1469,7 +1520,7 @@ export default function Home() {
   };
 
   // ===== STORIES =====
-  const todosOsStories = { ...storiesFake, ...storiesUsuarios };
+  const todosOsStories = { ...storiesFake, ...storiesUsuarios, ...storiesBanco };
 
   const storiesVisiveis: { [usuario: string]: any[] } = {};
   Object.entries(todosOsStories).forEach(([autor, lista]: any) => {
@@ -1480,7 +1531,7 @@ export default function Home() {
     }
   });
 
-  const abrirStory = (autorStory: string, index: number) => {
+  const abrirStory = async (autorStory: string, index: number) => {
     setStoryAberto({ usuario: autorStory, index });
     setProgressoStory(0);
     if (usuario) {
@@ -1491,6 +1542,22 @@ export default function Home() {
           if (atual.includes(usuario)) return prev;
           return { ...prev, [story.id]: [...atual, usuario] };
         });
+
+        // Salva no Supabase se for story do banco
+        if (typeof story.id === "string" && story.id.startsWith("db_story_")) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const idNum = parseInt(story.id.replace("db_story_", ""));
+              if (!isNaN(idNum)) {
+                await supabase.from("story_views").upsert(
+                  { story_id: idNum, user_id: user.id },
+                  { onConflict: "story_id,user_id" }
+                );
+              }
+            }
+          } catch (err) { console.error("Erro view story:", err); }
+        }
       }
     }
   };
@@ -3060,32 +3127,50 @@ export default function Home() {
                   </button>
                 )}
                 <div className="flex items-center gap-2">
-                  <input type="text" placeholder={usuario ? `Responder a @${storyAberto.usuario}...` : "Faça login para responder"} value={textoRespostaStory} onChange={(e) => setTextoRespostaStory(e.target.value)} onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
+                  <input type="text" placeholder={usuario ? `Responder a @${storyAberto.usuario}...` : "Faça login para responder"} value={textoRespostaStory} onChange={(e) => setTextoRespostaStory(e.target.value)} onKeyDown={async (e) => {
+                                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
                       if (!textoRespostaStory.trim()) return;
-                      const outroSegueVoce = usuarios[storyAberto.usuario]?.inscricoes?.includes(`@${usuario}`);
-                      if (outroSegueVoce) {
-                        const chave = getChaveConversa(usuario, storyAberto.usuario);
-                        setTodasMensagens((prev) => ({ ...prev, [chave]: [...(prev[chave] || []), { de: usuario, para: storyAberto.usuario, texto: `📸 Story: ${textoRespostaStory.trim()}`, timestamp: Date.now(), lida: false }] }));
-                      } else {
-                        setSolicitacoes((prev) => ({ ...prev, [storyAberto.usuario]: [...(prev[storyAberto.usuario] || []), { id: Date.now() + Math.random(), de: usuario, para: storyAberto.usuario, texto: `📸 Story: ${textoRespostaStory.trim()}`, timestamp: Date.now() }] }));
-                      }
-                      setTextoRespostaStory(""); alert("Resposta enviada!");
+                      const textoResp = textoRespostaStory.trim();
+                      setTextoRespostaStory("");
+
+                      try {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        const paraId = usuarios[storyAberto.usuario]?.idSupabase;
+                        if (user && paraId) {
+                          const { data: novaMsg } = await supabase.from("messages").insert({
+                            from_id: user.id,
+                            to_id: paraId,
+                            texto: `📸 Story: ${textoResp}`,
+                          }).select("*, from_profile:profiles!messages_from_id_fkey(username), to_profile:profiles!messages_to_id_fkey(username)").single();
+
+                          if (novaMsg) setMensagensBanco((prev) => [...prev, novaMsg]);
+                        }
+                      } catch (err) { console.error("Erro responder story:", err); }
+                      alert("Resposta enviada!");
                     }
                   }} disabled={!usuario} className="flex-1 bg-transparent border border-white/50 hover:border-white focus:border-white rounded-full px-4 py-2 text-sm text-white placeholder-white/70 outline-none transition backdrop-blur disabled:opacity-50" />
-                  <button onClick={() => {
+                  <button onClick={async () => {
                     if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
                     if (!textoRespostaStory.trim()) return;
-                    const outroSegueVoce = usuarios[storyAberto.usuario]?.inscricoes?.includes(`@${usuario}`);
-                    if (outroSegueVoce) {
-                      const chave = getChaveConversa(usuario, storyAberto.usuario);
-                      setTodasMensagens((prev) => ({ ...prev, [chave]: [...(prev[chave] || []), { de: usuario, para: storyAberto.usuario, texto: `📸 Story: ${textoRespostaStory.trim()}`, timestamp: Date.now(), lida: false }] }));
-                    } else {
-                      setSolicitacoes((prev) => ({ ...prev, [storyAberto.usuario]: [...(prev[storyAberto.usuario] || []), { id: Date.now() + Math.random(), de: usuario, para: storyAberto.usuario, texto: `📸 Story: ${textoRespostaStory.trim()}`, timestamp: Date.now() }] }));
-                    }
-                    setTextoRespostaStory(""); alert("Resposta enviada!");
+                    const textoResp = textoRespostaStory.trim();
+                    setTextoRespostaStory("");
+
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      const paraId = usuarios[storyAberto.usuario]?.idSupabase;
+                      if (user && paraId) {
+                        const { data: novaMsg } = await supabase.from("messages").insert({
+                          from_id: user.id,
+                          to_id: paraId,
+                          texto: `📸 Story: ${textoResp}`,
+                        }).select("*, from_profile:profiles!messages_from_id_fkey(username), to_profile:profiles!messages_to_id_fkey(username)").single();
+
+                        if (novaMsg) setMensagensBanco((prev) => [...prev, novaMsg]);
+                      }
+                    } catch (err) { console.error("Erro responder story:", err); }
+                    alert("Resposta enviada!");
                   }} disabled={!usuario || !textoRespostaStory.trim()} className="w-10 h-10 rounded-full bg-white/90 hover:bg-white disabled:opacity-40 flex items-center justify-center transition cursor-pointer backdrop-blur flex-shrink-0">
                     <span className="material-icons-outlined text-black text-lg">send</span>
                   </button>
@@ -3094,13 +3179,28 @@ export default function Home() {
                     const listaCurtidas = storyCurtidas[storyId] || [];
                     const curtiu = usuario ? listaCurtidas.includes(usuario) : false;
                     return (
-                      <button onClick={() => {
+                      <button onClick={async () => {
                         if (!logado) { setModoAuth("login"); setMostrarLogin(true); return; }
+                        const jaCurtiu = (storyCurtidas[storyId] || []).includes(usuario);
                         setStoryCurtidas((prev) => {
                           const atuais = prev[storyId] || [];
                           if (atuais.includes(usuario)) return { ...prev, [storyId]: atuais.filter((u) => u !== usuario) };
                           return { ...prev, [storyId]: [...atuais, usuario] };
                         });
+
+                        try {
+                          const { data: { user } } = await supabase.auth.getUser();
+                          if (user && typeof storyAtual.id === "string" && storyAtual.id.startsWith("db_story_")) {
+                            const idNum = parseInt(storyAtual.id.replace("db_story_", ""));
+                            if (!isNaN(idNum)) {
+                              if (jaCurtiu) {
+                                await supabase.from("story_likes").delete().eq("story_id", idNum).eq("user_id", user.id);
+                              } else {
+                                await supabase.from("story_likes").insert({ story_id: idNum, user_id: user.id });
+                              }
+                            }
+                          }
+                        } catch (err) { console.error("Erro curtir story:", err); }
                       }} className="w-10 h-10 rounded-full bg-white/90 hover:bg-white flex items-center justify-center transition cursor-pointer backdrop-blur flex-shrink-0">
                         <span className={`material-icons-outlined text-lg transition-transform ${curtiu ? "text-red-500 scale-110" : "text-black"}`}>{curtiu ? "favorite" : "favorite_border"}</span>
                       </button>
@@ -3149,12 +3249,37 @@ export default function Home() {
             )}
             <input type="text" placeholder="Escreva algo... (opcional)" value={textoStoryInput} onChange={(e) => setTextoStoryInput(e.target.value.slice(0, 120))} className="w-full bg-[#0f0f0f] border border-[#303030] rounded-lg px-4 py-2 mb-1 text-white outline-none focus:border-[#e888d3]" />
             <p className="text-xs text-gray-500 mb-4 text-right">{textoStoryInput.length}/120</p>
-            <button onClick={() => {
+            <button onClick={async () => {
               if (!imgStoryInput) { alert("Escolha uma imagem!"); return; }
-              const novo = { id: `story_${Date.now()}`, autor: usuario, imagem: imgStoryInput, texto: textoStoryInput.trim() || null, timestamp: Date.now() };
-              setStoriesUsuarios((prev) => ({ ...prev, [usuario]: [novo, ...(prev[usuario] || [])] }));
+              const texto = textoStoryInput.trim() || null;
+              const imagem = imgStoryInput;
               setImgStoryInput(""); setTextoStoryInput(""); setArquivoStory(null); setMostrarUploadStory(false);
-              alert("Story publicado!");
+
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) { alert("Faça login primeiro"); return; }
+
+                const { data: salvo, error: erro } = await supabase.from("stories").insert({
+                  user_id: user.id,
+                  imagem,
+                  texto,
+                }).select().single();
+
+                if (erro) { console.error("Erro story:", erro); alert("Erro ao salvar"); return; }
+
+                if (salvo) {
+                  const novo = {
+                    id: `db_story_${salvo.id}`,
+                    dbId: salvo.id,
+                    autor: usuario,
+                    imagem: salvo.imagem,
+                    texto: salvo.texto,
+                    timestamp: new Date(salvo.created_at).getTime(),
+                  };
+                  setStoriesBanco((prev) => ({ ...prev, [usuario]: [...(prev[usuario] || []), novo] }));
+                  alert("Story publicado!");
+                }
+              } catch (err) { console.error("Erro:", err); }
             }} className="w-full bg-[#e888d3] hover:bg-[#d176be] text-black font-bold py-2 rounded-full transition-all cursor-pointer">Publicar story</button>
           </div>
         </div>
